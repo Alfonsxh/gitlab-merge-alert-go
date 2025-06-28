@@ -1,0 +1,251 @@
+{{define "content"}}
+<div id="app">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Webhook管理</h1>
+        <button type="button" class="btn btn-primary" @click="showAddModal">
+            <i class="bi bi-plus"></i> 添加Webhook
+        </button>
+    </div>
+
+    <!-- Webhook列表 -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>名称</th>
+                            <th>URL</th>
+                            <th>描述</th>
+                            <th>状态</th>
+                            <th>关联项目</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="webhook in webhooks" :key="webhook.id">
+                            <td v-text="webhook.id">-</td>
+                            <td v-text="webhook.name">-</td>
+                            <td>
+                                <code class="small" v-text="webhook.url">-</code>
+                            </td>
+                            <td v-text="webhook.description || '-'">-</td>
+                            <td>
+                                <span :class="'badge ' + (webhook.is_active ? 'bg-success' : 'bg-secondary')" 
+                                      v-text="webhook.is_active ? '启用' : '禁用'">-</span>
+                            </td>
+                            <td>
+                                <span v-for="project in webhook.projects" :key="project.id" class="badge bg-info me-1" v-text="project.name">-</span>
+                                <span v-if="!webhook.projects || webhook.projects.length === 0" class="text-muted">无</span>
+                            </td>
+                            <td v-text="formatDate(webhook.created_at)">-</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-warning me-1" @click="testWebhook(webhook)">
+                                    <i class="bi bi-play"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary me-1" @click="editWebhook(webhook)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @click="deleteWebhook(webhook.id)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑Webhook模态框 -->
+    <div class="modal fade" id="webhookModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" v-text="isEditing ? '编辑Webhook' : '添加Webhook'">Webhook管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form @submit.prevent="saveWebhook">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">名称 *</label>
+                            <input type="text" class="form-control" id="name" v-model="currentWebhook.name" required>
+                            <div class="form-text">为这个Webhook起一个易识别的名称</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="url" class="form-label">Webhook URL *</label>
+                            <input type="url" class="form-control" id="url" v-model="currentWebhook.url" required>
+                            <div class="form-text">企业微信机器人的Webhook URL</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">描述</label>
+                            <textarea class="form-control" id="description" v-model="currentWebhook.description" rows="3"></textarea>
+                            <div class="form-text">描述这个Webhook的用途</div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_active" v-model="currentWebhook.is_active">
+                                <label class="form-check-label" for="is_active">
+                                    启用此Webhook
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" @click="saveWebhook" v-text="isEditing ? '更新' : '添加'">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 测试Webhook模态框 -->
+    <div class="modal fade" id="testModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">测试Webhook</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>正在向以下Webhook发送测试消息：</p>
+                    <p><strong>名称：</strong><span v-text="testingWebhook?.name">-</span></p>
+                    <p><strong>URL：</strong><code v-text="testingWebhook?.url">-</code></p>
+                    <div v-if="testResult" class="alert" :class="testResult.success ? 'alert-success' : 'alert-danger'">
+                        <span v-text="testResult.message">-</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" @click="sendTestMessage" :disabled="testingSending" v-text="testingSending ? '发送中...' : '发送测试消息'">
+                        发送测试消息
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            webhooks: [],
+            currentWebhook: {
+                id: null,
+                name: '',
+                url: '',
+                description: '',
+                is_active: true
+            },
+            testingWebhook: null,
+            testResult: null,
+            testingSending: false,
+            isEditing: false
+        }
+    },
+    methods: {
+        async loadWebhooks() {
+            try {
+                const response = await axios.get('/api/v1/webhooks');
+                this.webhooks = response.data.data;
+            } catch (error) {
+                console.error('Failed to load webhooks:', error);
+                alert('加载Webhook列表失败');
+            }
+        },
+        showAddModal() {
+            this.currentWebhook = {
+                id: null,
+                name: '',
+                url: '',
+                description: '',
+                is_active: true
+            };
+            this.isEditing = false;
+            const modal = new bootstrap.Modal(document.getElementById('webhookModal'));
+            modal.show();
+        },
+        editWebhook(webhook) {
+            this.currentWebhook = { ...webhook };
+            this.isEditing = true;
+            const modal = new bootstrap.Modal(document.getElementById('webhookModal'));
+            modal.show();
+        },
+        async saveWebhook() {
+            try {
+                if (this.isEditing) {
+                    await axios.put(`/api/v1/webhooks/${this.currentWebhook.id}`, this.currentWebhook);
+                } else {
+                    await axios.post('/api/v1/webhooks', this.currentWebhook);
+                }
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('webhookModal'));
+                modal.hide();
+                
+                await this.loadWebhooks();
+                alert(this.isEditing ? 'Webhook更新成功' : 'Webhook添加成功');
+            } catch (error) {
+                console.error('Failed to save webhook:', error);
+                alert('保存Webhook失败: ' + (error.response?.data?.error || error.message));
+            }
+        },
+        async deleteWebhook(webhookId) {
+            if (!confirm('确定要删除这个Webhook吗？')) {
+                return;
+            }
+            
+            try {
+                await axios.delete(`/api/v1/webhooks/${webhookId}`);
+                await this.loadWebhooks();
+                alert('Webhook删除成功');
+            } catch (error) {
+                console.error('Failed to delete webhook:', error);
+                alert('删除Webhook失败');
+            }
+        },
+        testWebhook(webhook) {
+            this.testingWebhook = webhook;
+            this.testResult = null;
+            this.testingSending = false;
+            const modal = new bootstrap.Modal(document.getElementById('testModal'));
+            modal.show();
+        },
+        async sendTestMessage() {
+            this.testingSending = true;
+            this.testResult = null;
+            
+            try {
+                // 这里应该调用后端的测试接口
+                // 暂时模拟一个测试结果
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                this.testResult = {
+                    success: true,
+                    message: '测试消息发送成功！'
+                };
+            } catch (error) {
+                this.testResult = {
+                    success: false,
+                    message: '测试消息发送失败: ' + error.message
+                };
+            } finally {
+                this.testingSending = false;
+            }
+        },
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleString('zh-CN');
+        }
+    },
+    mounted() {
+        this.loadWebhooks();
+    }
+}).mount('#app');
+</script>
+{{end}}

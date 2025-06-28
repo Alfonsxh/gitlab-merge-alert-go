@@ -1,0 +1,260 @@
+{{define "content"}}
+<div id="app">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">项目管理</h1>
+        <button type="button" class="btn btn-primary" @click="showAddModal">
+            <i class="bi bi-plus"></i> 添加项目
+        </button>
+    </div>
+
+    <!-- 项目列表 -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>项目名称</th>
+                            <th>GitLab项目ID</th>
+                            <th>描述</th>
+                            <th>关联Webhook</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="project in projects" :key="project.id">
+                            <td v-text="project.id">-</td>
+                            <td>
+                                <a :href="project.url" target="_blank" class="text-decoration-none">
+                                    <span v-text="project.name">-</span>
+                                    <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                </a>
+                            </td>
+                            <td v-text="project.gitlab_project_id">-</td>
+                            <td v-text="project.description || '-'">-</td>
+                            <td>
+                                <span v-for="webhook in project.webhooks" :key="webhook.id" class="badge bg-secondary me-1" v-text="webhook.name">-</span>
+                                <span v-if="!project.webhooks || project.webhooks.length === 0" class="text-muted">无</span>
+                            </td>
+                            <td v-text="formatDate(project.created_at)">-</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-success me-1" @click="manageWebhooks(project)">
+                                    <i class="bi bi-link"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary me-1" @click="editProject(project)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @click="deleteProject(project.id)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑项目模态框 -->
+    <div class="modal fade" id="projectModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" v-text="isEditing ? '编辑项目' : '添加项目'">项目管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form @submit.prevent="saveProject">
+                        <div class="mb-3">
+                            <label for="gitlab_project_id" class="form-label">GitLab项目ID *</label>
+                            <input type="number" class="form-control" id="gitlab_project_id" v-model="currentProject.gitlab_project_id" required>
+                            <div class="form-text">从GitLab项目URL中获取项目ID</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="name" class="form-label">项目名称 *</label>
+                            <input type="text" class="form-control" id="name" v-model="currentProject.name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="url" class="form-label">项目URL *</label>
+                            <input type="url" class="form-control" id="url" v-model="currentProject.url" required>
+                            <div class="form-text">GitLab项目的完整URL</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">描述</label>
+                            <textarea class="form-control" id="description" v-model="currentProject.description" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="access_token" class="form-label">访问令牌</label>
+                            <input type="password" class="form-control" id="access_token" v-model="currentProject.access_token">
+                            <div class="form-text">GitLab个人访问令牌（可选）</div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" @click="saveProject" v-text="isEditing ? '更新' : '添加'">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webhook关联管理模态框 -->
+    <div class="modal fade" id="webhookModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">管理项目Webhook</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>项目: <span v-text="selectedProject?.name">-</span></h6>
+                    <hr>
+                    <div v-for="webhook in allWebhooks" :key="webhook.id" class="form-check">
+                        <input class="form-check-input" type="checkbox" :id="'webhook-' + webhook.id" 
+                               :checked="isWebhookLinked(webhook.id)" @change="toggleWebhook(webhook.id)">
+                        <label class="form-check-label" :for="'webhook-' + webhook.id">
+                            <span v-text="webhook.name">-</span>
+                            <small class="text-muted d-block" v-text="webhook.url">-</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            projects: [],
+            allWebhooks: [],
+            currentProject: {
+                id: null,
+                gitlab_project_id: '',
+                name: '',
+                url: '',
+                description: '',
+                access_token: ''
+            },
+            selectedProject: null,
+            isEditing: false
+        }
+    },
+    methods: {
+        async loadProjects() {
+            try {
+                const response = await axios.get('/api/v1/projects');
+                this.projects = response.data.data;
+            } catch (error) {
+                console.error('Failed to load projects:', error);
+                alert('加载项目列表失败');
+            }
+        },
+        async loadWebhooks() {
+            try {
+                const response = await axios.get('/api/v1/webhooks');
+                this.allWebhooks = response.data.data;
+            } catch (error) {
+                console.error('Failed to load webhooks:', error);
+            }
+        },
+        showAddModal() {
+            this.currentProject = {
+                id: null,
+                gitlab_project_id: '',
+                name: '',
+                url: '',
+                description: '',
+                access_token: ''
+            };
+            this.isEditing = false;
+            const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+            modal.show();
+        },
+        editProject(project) {
+            this.currentProject = { ...project };
+            this.isEditing = true;
+            const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+            modal.show();
+        },
+        async saveProject() {
+            try {
+                if (this.isEditing) {
+                    await axios.put(`/api/v1/projects/${this.currentProject.id}`, this.currentProject);
+                } else {
+                    await axios.post('/api/v1/projects', this.currentProject);
+                }
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
+                modal.hide();
+                
+                await this.loadProjects();
+                alert(this.isEditing ? '项目更新成功' : '项目添加成功');
+            } catch (error) {
+                console.error('Failed to save project:', error);
+                alert('保存项目失败: ' + (error.response?.data?.error || error.message));
+            }
+        },
+        async deleteProject(projectId) {
+            if (!confirm('确定要删除这个项目吗？')) {
+                return;
+            }
+            
+            try {
+                await axios.delete(`/api/v1/projects/${projectId}`);
+                await this.loadProjects();
+                alert('项目删除成功');
+            } catch (error) {
+                console.error('Failed to delete project:', error);
+                alert('删除项目失败');
+            }
+        },
+        async manageWebhooks(project) {
+            this.selectedProject = project;
+            await this.loadWebhooks();
+            const modal = new bootstrap.Modal(document.getElementById('webhookModal'));
+            modal.show();
+        },
+        isWebhookLinked(webhookId) {
+            if (!this.selectedProject || !this.selectedProject.webhooks) {
+                return false;
+            }
+            return this.selectedProject.webhooks.some(w => w.id === webhookId);
+        },
+        async toggleWebhook(webhookId) {
+            try {
+                const isLinked = this.isWebhookLinked(webhookId);
+                if (isLinked) {
+                    await axios.delete(`/api/v1/project-webhooks/${this.selectedProject.id}/${webhookId}`);
+                } else {
+                    await axios.post(`/api/v1/project-webhooks`, {
+                        project_id: this.selectedProject.id,
+                        webhook_id: webhookId
+                    });
+                }
+                await this.loadProjects();
+            } catch (error) {
+                console.error('Failed to toggle webhook:', error);
+                alert('操作失败');
+            }
+        },
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleString('zh-CN');
+        }
+    },
+    mounted() {
+        this.loadProjects();
+    }
+}).mount('#app');
+</script>
+{{end}}

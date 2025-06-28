@@ -1,0 +1,158 @@
+{{define "content"}}
+<div id="app">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">仪表板</h1>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">用户总数</h5>
+                            <h2 class="mb-0" v-text="stats.total_users">0</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-people fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">项目总数</h5>
+                            <h2 class="mb-0" v-text="stats.total_projects">0</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-folder fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Webhook总数</h5>
+                            <h2 class="mb-0" v-text="stats.total_webhooks">0</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-webhook fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">通知总数</h5>
+                            <h2 class="mb-0" v-text="stats.total_notifications">0</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-bell fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 最近通知 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">最近通知记录</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>项目</th>
+                                    <th>标题</th>
+                                    <th>分支</th>
+                                    <th>作者</th>
+                                    <th>状态</th>
+                                    <th>时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="notification in notifications" :key="notification.id">
+                                    <td v-text="notification.project_name">-</td>
+                                    <td v-text="notification.title">-</td>
+                                    <td>
+                                        <span class="badge bg-secondary" v-text="notification.source_branch">-</span>
+                                        <i class="bi bi-arrow-right mx-1"></i>
+                                        <span class="badge bg-primary" v-text="notification.target_branch">-</span>
+                                    </td>
+                                    <td v-text="notification.author_email">-</td>
+                                    <td>
+                                        <span :class="'badge ' + (notification.notification_sent ? 'bg-success' : 'bg-danger')" 
+                                              v-text="notification.notification_sent ? '已发送' : '发送失败'">-</span>
+                                    </td>
+                                    <td v-text="formatDate(notification.created_at)">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            stats: {
+                total_users: 0,
+                total_projects: 0,
+                total_webhooks: 0,
+                total_notifications: 0
+            },
+            notifications: []
+        }
+    },
+    methods: {
+        async loadStats() {
+            try {
+                const response = await axios.get('/api/v1/stats');
+                this.stats = response.data.data;
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        },
+        async loadNotifications() {
+            try {
+                const response = await axios.get('/api/v1/notifications?page_size=10');
+                this.notifications = response.data.data;
+            } catch (error) {
+                console.error('Failed to load notifications:', error);
+            }
+        },
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleString('zh-CN');
+        }
+    },
+    mounted() {
+        this.loadStats();
+        this.loadNotifications();
+    }
+}).mount('#app');
+</script>
+{{end}}
