@@ -85,7 +85,28 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 }
 
 func (h *Handler) Dashboard(c *gin.Context) {
-	c.HTML(http.StatusOK, "dashboard.html", gin.H{
+	logger.GetLogger().Infof("Dashboard access from %s", c.ClientIP())
+	
+	data := gin.H{
 		"title": "GitLab Merge Alert Dashboard",
-	})
+	}
+	
+	if err := h.renderTemplate(c, "dashboard.html", data); err != nil {
+		logger.GetLogger().Errorf("Failed to render dashboard template: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
+			"error": "Failed to load dashboard",
+		})
+		return
+	}
+}
+
+func (h *Handler) renderTemplate(c *gin.Context, templateName string, data gin.H) error {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.GetLogger().Errorf("Template rendering panic: %v", r)
+		}
+	}()
+	
+	c.HTML(http.StatusOK, templateName, data)
+	return nil
 }

@@ -1,5 +1,88 @@
-{{define "content"}}
-<div id="app">
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}} - GitLab Merge Alert</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js"></script>
+    <style>
+        .sidebar {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0;
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+        }
+        .sidebar-sticky {
+            position: relative;
+            top: 0;
+            height: calc(100vh - 48px);
+            padding-top: .5rem;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        .main {
+            margin-left: 240px;
+            padding: 20px;
+        }
+        .navbar-brand {
+            padding-top: .75rem;
+            padding-bottom: .75rem;
+        }
+        .navbar-nav .nav-link {
+            padding-right: .5rem;
+            padding-left: .5rem;
+            color: rgba(0,0,0,.5);
+        }
+        .navbar-nav .nav-link.active {
+            color: rgba(0,0,0,.9);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0 shadow">
+        <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="/">GitLab Merge Alert</a>
+        <button class="navbar-toggler position-absolute d-md-none collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/">
+                                <i class="bi bi-house"></i> 仪表板
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/users">
+                                <i class="bi bi-people"></i> 用户管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/projects">
+                                <i class="bi bi-folder"></i> 项目管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/webhooks">
+                                <i class="bi bi-webhook"></i> Webhook管理
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main">
+                <div id="app">
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
         <h1 class="h2">项目管理</h1>
         <button type="button" class="btn btn-primary" @click="showAddModal">
@@ -128,133 +211,150 @@
             </div>
         </div>
     </div>
-</div>
+                </div>
+            </main>
+        </div>
+    </div>
 
-<script>
-const { createApp } = Vue;
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 高亮当前页面的导航链接
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === currentPath) {
+                    link.classList.add('active');
+                }
+            });
+        });
 
-createApp({
-    data() {
-        return {
-            projects: [],
-            allWebhooks: [],
-            currentProject: {
-                id: null,
-                gitlab_project_id: '',
-                name: '',
-                url: '',
-                description: '',
-                access_token: ''
+        // Vue.js 应用
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    projects: [],
+                    allWebhooks: [],
+                    currentProject: {
+                        id: null,
+                        gitlab_project_id: '',
+                        name: '',
+                        url: '',
+                        description: '',
+                        access_token: ''
+                    },
+                    selectedProject: null,
+                    isEditing: false
+                }
             },
-            selectedProject: null,
-            isEditing: false
-        }
-    },
-    methods: {
-        async loadProjects() {
-            try {
-                const response = await axios.get('/api/v1/projects');
-                this.projects = response.data.data;
-            } catch (error) {
-                console.error('Failed to load projects:', error);
-                alert('加载项目列表失败');
-            }
-        },
-        async loadWebhooks() {
-            try {
-                const response = await axios.get('/api/v1/webhooks');
-                this.allWebhooks = response.data.data;
-            } catch (error) {
-                console.error('Failed to load webhooks:', error);
-            }
-        },
-        showAddModal() {
-            this.currentProject = {
-                id: null,
-                gitlab_project_id: '',
-                name: '',
-                url: '',
-                description: '',
-                access_token: ''
-            };
-            this.isEditing = false;
-            const modal = new bootstrap.Modal(document.getElementById('projectModal'));
-            modal.show();
-        },
-        editProject(project) {
-            this.currentProject = { ...project };
-            this.isEditing = true;
-            const modal = new bootstrap.Modal(document.getElementById('projectModal'));
-            modal.show();
-        },
-        async saveProject() {
-            try {
-                if (this.isEditing) {
-                    await axios.put(`/api/v1/projects/${this.currentProject.id}`, this.currentProject);
-                } else {
-                    await axios.post('/api/v1/projects', this.currentProject);
+            methods: {
+                async loadProjects() {
+                    try {
+                        const response = await axios.get('/api/v1/projects');
+                        this.projects = response.data.data || [];
+                    } catch (error) {
+                        console.error('Failed to load projects:', error);
+                        alert('加载项目列表失败');
+                    }
+                },
+                async loadWebhooks() {
+                    try {
+                        const response = await axios.get('/api/v1/webhooks');
+                        this.allWebhooks = response.data.data || [];
+                    } catch (error) {
+                        console.error('Failed to load webhooks:', error);
+                    }
+                },
+                showAddModal() {
+                    this.currentProject = {
+                        id: null,
+                        gitlab_project_id: '',
+                        name: '',
+                        url: '',
+                        description: '',
+                        access_token: ''
+                    };
+                    this.isEditing = false;
+                    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+                    modal.show();
+                },
+                editProject(project) {
+                    this.currentProject = { ...project };
+                    this.isEditing = true;
+                    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+                    modal.show();
+                },
+                async saveProject() {
+                    try {
+                        if (this.isEditing) {
+                            await axios.put(`/api/v1/projects/${this.currentProject.id}`, this.currentProject);
+                        } else {
+                            await axios.post('/api/v1/projects', this.currentProject);
+                        }
+                        
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
+                        modal.hide();
+                        
+                        await this.loadProjects();
+                        alert(this.isEditing ? '项目更新成功' : '项目添加成功');
+                    } catch (error) {
+                        console.error('Failed to save project:', error);
+                        alert('保存项目失败: ' + (error.response?.data?.error || error.message));
+                    }
+                },
+                async deleteProject(projectId) {
+                    if (!confirm('确定要删除这个项目吗？')) {
+                        return;
+                    }
+                    
+                    try {
+                        await axios.delete(`/api/v1/projects/${projectId}`);
+                        await this.loadProjects();
+                        alert('项目删除成功');
+                    } catch (error) {
+                        console.error('Failed to delete project:', error);
+                        alert('删除项目失败');
+                    }
+                },
+                async manageWebhooks(project) {
+                    this.selectedProject = project;
+                    await this.loadWebhooks();
+                    const modal = new bootstrap.Modal(document.getElementById('webhookModal'));
+                    modal.show();
+                },
+                isWebhookLinked(webhookId) {
+                    if (!this.selectedProject || !this.selectedProject.webhooks) {
+                        return false;
+                    }
+                    return this.selectedProject.webhooks.some(w => w.id === webhookId);
+                },
+                async toggleWebhook(webhookId) {
+                    try {
+                        const isLinked = this.isWebhookLinked(webhookId);
+                        if (isLinked) {
+                            await axios.delete(`/api/v1/project-webhooks/${this.selectedProject.id}/${webhookId}`);
+                        } else {
+                            await axios.post(`/api/v1/project-webhooks`, {
+                                project_id: this.selectedProject.id,
+                                webhook_id: webhookId
+                            });
+                        }
+                        await this.loadProjects();
+                    } catch (error) {
+                        console.error('Failed to toggle webhook:', error);
+                        alert('操作失败');
+                    }
+                },
+                formatDate(dateString) {
+                    return new Date(dateString).toLocaleString('zh-CN');
                 }
-                
-                const modal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
-                modal.hide();
-                
-                await this.loadProjects();
-                alert(this.isEditing ? '项目更新成功' : '项目添加成功');
-            } catch (error) {
-                console.error('Failed to save project:', error);
-                alert('保存项目失败: ' + (error.response?.data?.error || error.message));
+            },
+            mounted() {
+                this.loadProjects();
             }
-        },
-        async deleteProject(projectId) {
-            if (!confirm('确定要删除这个项目吗？')) {
-                return;
-            }
-            
-            try {
-                await axios.delete(`/api/v1/projects/${projectId}`);
-                await this.loadProjects();
-                alert('项目删除成功');
-            } catch (error) {
-                console.error('Failed to delete project:', error);
-                alert('删除项目失败');
-            }
-        },
-        async manageWebhooks(project) {
-            this.selectedProject = project;
-            await this.loadWebhooks();
-            const modal = new bootstrap.Modal(document.getElementById('webhookModal'));
-            modal.show();
-        },
-        isWebhookLinked(webhookId) {
-            if (!this.selectedProject || !this.selectedProject.webhooks) {
-                return false;
-            }
-            return this.selectedProject.webhooks.some(w => w.id === webhookId);
-        },
-        async toggleWebhook(webhookId) {
-            try {
-                const isLinked = this.isWebhookLinked(webhookId);
-                if (isLinked) {
-                    await axios.delete(`/api/v1/project-webhooks/${this.selectedProject.id}/${webhookId}`);
-                } else {
-                    await axios.post(`/api/v1/project-webhooks`, {
-                        project_id: this.selectedProject.id,
-                        webhook_id: webhookId
-                    });
-                }
-                await this.loadProjects();
-            } catch (error) {
-                console.error('Failed to toggle webhook:', error);
-                alert('操作失败');
-            }
-        },
-        formatDate(dateString) {
-            return new Date(dateString).toLocaleString('zh-CN');
-        }
-    },
-    mounted() {
-        this.loadProjects();
-    }
-}).mount('#app');
-</script>
-{{end}}
+        }).mount('#app');
+    </script>
+</body>
+</html>
