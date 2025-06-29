@@ -7,32 +7,32 @@ import (
 )
 
 type Notification struct {
-	ID                uint           `json:"id" gorm:"primarykey"`
-	ProjectID         uint           `json:"project_id" gorm:"not null"`
-	MergeRequestID    int            `json:"merge_request_id" gorm:"not null"`
-	Title             string         `json:"title"`
-	SourceBranch      string         `json:"source_branch"`
-	TargetBranch      string         `json:"target_branch"`
-	AuthorEmail       string         `json:"author_email"`
-	AssigneeEmails    string         `json:"assignee_emails"` // JSON array as string
-	Status            string         `json:"status"`
-	NotificationSent  bool           `json:"notification_sent" gorm:"default:false"`
-	ErrorMessage      string         `json:"error_message"`
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
-	DeletedAt         gorm.DeletedAt `json:"-" gorm:"index"`
-	
+	ID               uint           `json:"id" gorm:"primarykey"`
+	ProjectID        uint           `json:"project_id" gorm:"not null"`
+	MergeRequestID   int            `json:"merge_request_id" gorm:"not null"`
+	Title            string         `json:"title"`
+	SourceBranch     string         `json:"source_branch"`
+	TargetBranch     string         `json:"target_branch"`
+	AuthorEmail      string         `json:"author_email"`
+	AssigneeEmails   string         `json:"assignee_emails"` // JSON array as string
+	Status           string         `json:"status"`
+	NotificationSent bool           `json:"notification_sent" gorm:"default:false"`
+	ErrorMessage     string         `json:"error_message"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `json:"-" gorm:"index"`
+
 	// 关联关系
-	Project           Project        `json:"project" gorm:"foreignKey:ProjectID"`
+	Project Project `json:"project" gorm:"foreignKey:ProjectID"`
 }
 
 type GitLabWebhookData struct {
-	ObjectKind       string `json:"object_kind"`
-	User             GitLabUser `json:"user"`
-	Project          GitLabProject `json:"project"`
-	Repository       GitLabRepository `json:"repository"`
+	ObjectKind       string             `json:"object_kind"`
+	User             GitLabUser         `json:"user"`
+	Project          GitLabProject      `json:"project"`
+	Repository       GitLabRepository   `json:"repository"`
 	ObjectAttributes GitLabMergeRequest `json:"object_attributes"`
-	Assignees        []GitLabUser `json:"assignees"`
+	Assignees        []GitLabUser       `json:"assignees"`
 }
 
 type GitLabUser struct {
@@ -43,9 +43,9 @@ type GitLabUser struct {
 }
 
 type GitLabProject struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	WebURL   string `json:"web_url"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	WebURL    string `json:"web_url"`
 	Namespace struct {
 		Name string `json:"name"`
 		Path string `json:"path"`

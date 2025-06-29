@@ -156,12 +156,12 @@ func (h *Handler) LinkProjectWebhook(c *gin.Context) {
 		ProjectID uint `json:"project_id" binding:"required"`
 		WebhookID uint `json:"webhook_id" binding:"required"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	projectID := uint64(req.ProjectID)
 	webhookID := uint64(req.WebhookID)
 

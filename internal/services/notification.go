@@ -105,7 +105,7 @@ func (s *NotificationService) sendNotifications(project *models.Project, webhook
 		if !webhook.IsActive {
 			continue
 		}
-		
+
 		if err := s.wechatService.SendMessage(webhook.URL, content, mentionedMobiles); err != nil {
 			return fmt.Errorf("failed to send to webhook %s: %v", webhook.Name, err)
 		}

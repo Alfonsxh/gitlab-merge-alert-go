@@ -12,11 +12,11 @@ import (
 )
 
 type Handler struct {
-	db             *gorm.DB
-	config         *config.Config
-	gitlabService  *services.GitLabService
-	wechatService  *services.WeChatService
-	notifyService  *services.NotificationService
+	db            *gorm.DB
+	config        *config.Config
+	gitlabService *services.GitLabService
+	wechatService *services.WeChatService
+	notifyService *services.NotificationService
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Handler {
@@ -62,7 +62,7 @@ func (h *Handler) renderErrorPage(c *gin.Context, errorMsg string) {
 			logger.GetLogger().Errorf("Error page rendering panic: %v", r)
 			// 最后的备用方案：返回简单的JSON错误
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "页面渲染失败",
+				"error":   "页面渲染失败",
 				"details": errorMsg,
 			})
 		}

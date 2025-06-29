@@ -336,8 +336,10 @@
                                         <label class="form-label">选择现有Webhook</label>
                                         <select class="form-select" v-model="batchWebhookConfig.unified_webhook_id">
                                             <option value="">选择一个现有的Webhook</option>
-                                            <option v-for="webhook in allWebhooks" :key="webhook.id" :value="webhook.id" v-text="webhook.name + ' - ' + webhook.url">
-                                            </option>
+                                            <template v-for="webhook in allWebhooks" :key="webhook?.id || Math.random()">
+                                                <option v-if="webhook && webhook.id" :value="webhook.id" v-text="webhook.name + ' - ' + webhook.url">
+                                                </option>
+                                            </template>
                                         </select>
                                     </div>
                                     
@@ -460,9 +462,11 @@
                                         <div class="d-flex align-items-center">
                                             <i class="bi bi-link me-2 text-success"></i>
                                             <span>使用现有Webhook: </span>
-                                            <span v-for="webhook in allWebhooks" :key="webhook.id" v-if="webhook.id == batchWebhookConfig.unified_webhook_id">
-                                                <strong v-text="webhook.name"></strong>
-                                            </span>
+                                            <template v-for="webhook in allWebhooks" :key="webhook?.id || Math.random()">
+                                                <span v-if="webhook && webhook.id && webhook.id == batchWebhookConfig.unified_webhook_id">
+                                                    <strong v-text="webhook.name"></strong>
+                                                </span>
+                                            </template>
                                         </div>
                                     </div>
                                     <div v-else-if="batchWebhookConfig.new_webhook.name && batchWebhookConfig.new_webhook.url">
@@ -583,14 +587,16 @@
                 <div class="modal-body">
                     <h6>项目: <span v-text="selectedProject?.name">-</span></h6>
                     <hr>
-                    <div v-for="webhook in allWebhooks" :key="webhook.id" class="form-check">
-                        <input class="form-check-input" type="checkbox" :id="'webhook-' + webhook.id" 
-                               :checked="isWebhookLinked(webhook.id)" @change="toggleWebhook(webhook.id)">
-                        <label class="form-check-label" :for="'webhook-' + webhook.id">
-                            <span v-text="webhook.name">-</span>
-                            <small class="text-muted d-block" v-text="webhook.url">-</small>
-                        </label>
-                    </div>
+                    <template v-for="webhook in allWebhooks" :key="webhook?.id || Math.random()">
+                        <div v-if="webhook && webhook.id" class="form-check">
+                            <input class="form-check-input" type="checkbox" :id="'webhook-' + webhook.id" 
+                                   :checked="isWebhookLinked(webhook.id)" @change="toggleWebhook(webhook.id)">
+                            <label class="form-check-label" :for="'webhook-' + webhook.id">
+                                <span v-text="webhook.name">-</span>
+                                <small class="text-muted d-block" v-text="webhook.url">-</small>
+                            </label>
+                        </div>
+                    </template>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
@@ -723,16 +729,48 @@
                 },
                 async loadWebhooks() {
                     try {
+                        console.log('Loading webhooks...');
                         const response = await axios.get('/api/v1/webhooks');
-                        this.allWebhooks = response.data.data || [];
+                        console.log('Raw API response:', response.data);
+                        
+                        const webhooks = response.data.data || [];
+                        console.log('Webhooks from API:', webhooks);
+                        
+                        // 过滤并验证webhook数据，确保只包含有效对象
+                        this.allWebhooks = webhooks.filter(webhook => {
+                            const isValid = webhook && 
+                                typeof webhook === 'object' && 
+                                webhook.id && 
+                                webhook.name && 
+                                webhook.url;
+                            if (!isValid) {
+                                console.warn('Invalid webhook filtered out:', webhook);
+                            }
+                            return isValid;
+                        });
+                        
+                        console.log('Loaded and filtered webhooks:', this.allWebhooks.length, this.allWebhooks);
                     } catch (error) {
                         console.error('Failed to load webhooks:', error);
+                        // 确保即使出错也有一个有效的空数组
+                        this.allWebhooks = [];
                     }
                 },
-                showAddModal() {
+                async showAddModal() {
                     // 重置所有状态
                     this.resetAddProjectState();
                     this.isEditing = false;
+                    
+                    // 确保allWebhooks是有效数组
+                    if (!Array.isArray(this.allWebhooks)) {
+                        this.allWebhooks = [];
+                    }
+                    
+                    // 确保Webhook数据已加载
+                    if (this.allWebhooks.length === 0) {
+                        await this.loadWebhooks();
+                    }
+                    
                     const modal = new bootstrap.Modal(document.getElementById('projectModal'));
                     modal.show();
                 },
@@ -1042,6 +1080,7 @@
             mounted() {
                 this.loadProjects();
                 this.loadGitLabConfig();
+                this.loadWebhooks();
             }
         }).mount('#app');
     </script>

@@ -61,6 +61,6 @@ func (s *WeChatService) FormatMergeRequestMessage(projectName, sourceBranch, tar
 		mergeTitle,
 		clickURL,
 	)
-	
+
 	return content
 }

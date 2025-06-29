@@ -7,18 +7,18 @@ import (
 )
 
 type Project struct {
-	ID               uint           `json:"id" gorm:"primarykey"`
-	GitLabProjectID  int            `json:"gitlab_project_id" gorm:"uniqueIndex;not null"`
-	Name             string         `json:"name" gorm:"not null"`
-	URL              string         `json:"url" gorm:"not null"`
-	Description      string         `json:"description"`
-	AccessToken      string         `json:"-"` // 不在JSON中显示敏感信息
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	DeletedAt        gorm.DeletedAt `json:"-" gorm:"index"`
-	
+	ID              uint           `json:"id" gorm:"primarykey"`
+	GitLabProjectID int            `json:"gitlab_project_id" gorm:"uniqueIndex;not null"`
+	Name            string         `json:"name" gorm:"not null"`
+	URL             string         `json:"url" gorm:"not null"`
+	Description     string         `json:"description"`
+	AccessToken     string         `json:"-"` // 不在JSON中显示敏感信息
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `json:"-" gorm:"index"`
+
 	// 关联关系
-	Webhooks         []Webhook      `json:"webhooks,omitempty" gorm:"many2many:project_webhooks;"`
+	Webhooks []Webhook `json:"webhooks,omitempty" gorm:"many2many:project_webhooks;"`
 }
 
 type CreateProjectRequest struct {
@@ -37,13 +37,13 @@ type UpdateProjectRequest struct {
 }
 
 type ProjectResponse struct {
-	ID              uint      `json:"id"`
-	GitLabProjectID int       `json:"gitlab_project_id"`
-	Name            string    `json:"name"`
-	URL             string    `json:"url"`
-	Description     string    `json:"description"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uint              `json:"id"`
+	GitLabProjectID int               `json:"gitlab_project_id"`
+	Name            string            `json:"name"`
+	URL             string            `json:"url"`
+	Description     string            `json:"description"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 	Webhooks        []WebhookResponse `json:"webhooks,omitempty"`
 }
 
@@ -84,8 +84,8 @@ type ScanGroupProjectsRequest struct {
 
 // ScanGroupProjectsResponse 扫描组项目的响应结构
 type ScanGroupProjectsResponse struct {
-	GroupInfo *GitLabGroupInfo      `json:"group_info"`
-	Projects  []*GitLabProjectInfo  `json:"projects"`
+	GroupInfo *GitLabGroupInfo     `json:"group_info"`
+	Projects  []*GitLabProjectInfo `json:"projects"`
 }
 
 // GitLabGroupInfo GitLab组信息
@@ -111,9 +111,9 @@ type GitLabProjectInfo struct {
 
 // BatchCreateProjectsRequest 批量创建项目的请求结构
 type BatchCreateProjectsRequest struct {
-	Projects         []BatchProjectInfo    `json:"projects" binding:"required"`
-	AccessToken      string                `json:"access_token"`
-	WebhookConfig    BatchWebhookConfig    `json:"webhook_config"`
+	Projects      []BatchProjectInfo `json:"projects" binding:"required"`
+	AccessToken   string             `json:"access_token"`
+	WebhookConfig BatchWebhookConfig `json:"webhook_config"`
 }
 
 // BatchProjectInfo 批量创建项目的项目信息
@@ -126,23 +126,23 @@ type BatchProjectInfo struct {
 
 // BatchWebhookConfig 批量创建项目的webhook配置
 type BatchWebhookConfig struct {
-	UseUnified      bool   `json:"use_unified"`      // 是否使用统一webhook
-	UnifiedWebhookID *uint `json:"unified_webhook_id,omitempty"` // 统一webhook ID
-	NewWebhook      *CreateWebhookRequest `json:"new_webhook,omitempty"`    // 新建webhook信息
-	ProjectWebhooks []ProjectWebhookMapping `json:"project_webhooks,omitempty"` // 项目-webhook映射
+	UseUnified       bool                    `json:"use_unified"`                  // 是否使用统一webhook
+	UnifiedWebhookID *uint                   `json:"unified_webhook_id,omitempty"` // 统一webhook ID
+	NewWebhook       *CreateWebhookRequest   `json:"new_webhook,omitempty"`        // 新建webhook信息
+	ProjectWebhooks  []ProjectWebhookMapping `json:"project_webhooks,omitempty"`   // 项目-webhook映射
 }
 
 // ProjectWebhookMapping 项目-webhook映射
 type ProjectWebhookMapping struct {
-	GitLabProjectID int   `json:"gitlab_project_id"`
-	WebhookID       uint  `json:"webhook_id"`
+	GitLabProjectID int  `json:"gitlab_project_id"`
+	WebhookID       uint `json:"webhook_id"`
 }
 
 // BatchCreateProjectsResponse 批量创建项目的响应结构
 type BatchCreateProjectsResponse struct {
-	SuccessCount int                    `json:"success_count"`
-	FailureCount int                    `json:"failure_count"`
-	Results      []BatchProjectResult   `json:"results"`
+	SuccessCount int                  `json:"success_count"`
+	FailureCount int                  `json:"failure_count"`
+	Results      []BatchProjectResult `json:"results"`
 }
 
 // BatchProjectResult 批量创建项目的单个结果

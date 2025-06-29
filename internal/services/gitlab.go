@@ -37,7 +37,7 @@ type GitLabProjectInfo struct {
 type ParsedGitLabURL struct {
 	BaseURL     string
 	ProjectPath string
-	IsGroup     bool   // 是否为组URL
+	IsGroup     bool // 是否为组URL
 	IsValid     bool
 	Error       string
 }
@@ -54,41 +54,41 @@ type GitLabGroupInfo struct {
 // ParseGitLabURL 解析GitLab项目URL，提取基础URL和项目路径
 func (s *GitLabService) ParseGitLabURL(projectURL string) *ParsedGitLabURL {
 	result := &ParsedGitLabURL{}
-	
+
 	// 清理URL，移除末尾的斜杠和可能的片段
 	projectURL = strings.TrimSpace(projectURL)
 	if projectURL == "" {
 		result.Error = "URL不能为空"
 		return result
 	}
-	
+
 	// 解析URL
 	parsedURL, err := url.Parse(projectURL)
 	if err != nil {
 		result.Error = "URL格式无效"
 		return result
 	}
-	
+
 	if parsedURL.Scheme == "" {
 		result.Error = "URL必须包含协议(http或https)"
 		return result
 	}
-	
+
 	if parsedURL.Host == "" {
 		result.Error = "URL必须包含主机名"
 		return result
 	}
-	
+
 	// 构建基础URL
 	result.BaseURL = fmt.Sprintf("%s://%s", parsedURL.Scheme, parsedURL.Host)
 	if parsedURL.Port() != "" && parsedURL.Port() != "80" && parsedURL.Port() != "443" {
 		result.BaseURL = fmt.Sprintf("%s:%s", result.BaseURL, parsedURL.Port())
 	}
-	
+
 	// 提取项目路径
 	path := strings.TrimPrefix(parsedURL.Path, "/")
 	path = strings.TrimSuffix(path, "/")
-	
+
 	// 移除GitLab特有的路径后缀
 	gitlabSuffixes := []string{
 		"/-/tree/",
@@ -99,25 +99,25 @@ func (s *GitLabService) ParseGitLabURL(projectURL string) *ParsedGitLabURL {
 		"/-/wiki",
 		"/-/settings",
 	}
-	
+
 	for _, suffix := range gitlabSuffixes {
 		if idx := strings.Index(path, suffix); idx != -1 {
 			path = path[:idx]
 			break
 		}
 	}
-	
+
 	// 验证项目路径格式
 	if path == "" {
 		result.Error = "无法从URL中提取项目路径"
 		return result
 	}
-	
+
 	// 判断是组还是项目
 	// 组路径: group 或 group/subgroup
 	// 项目路径: group/project 或 group/subgroup/project
 	pathParts := strings.Split(path, "/")
-	
+
 	if len(pathParts) == 1 {
 		// 单层路径，可能是组
 		result.IsGroup = true
@@ -126,14 +126,14 @@ func (s *GitLabService) ParseGitLabURL(projectURL string) *ParsedGitLabURL {
 		// 先假设是项目，如果API调用失败再尝试作为组
 		result.IsGroup = false
 	}
-	
+
 	// GitLab路径格式验证（组和项目都适用）
 	pathRegex := regexp.MustCompile(`^[a-zA-Z0-9._-]+(/[a-zA-Z0-9._-]+)*$`)
 	if !pathRegex.MatchString(path) {
 		result.Error = "路径格式无效，应为 group 或 group/project 格式"
 		return result
 	}
-	
+
 	result.ProjectPath = path
 	result.IsValid = true
 	return result
@@ -146,7 +146,7 @@ func (s *GitLabService) GetProjectByURL(projectURL, accessToken string) (*GitLab
 	if !parsed.IsValid {
 		return nil, fmt.Errorf("URL解析失败: %s", parsed.Error)
 	}
-	
+
 	// 使用解析出的信息获取项目
 	return s.GetProjectByPath(parsed.BaseURL, parsed.ProjectPath, accessToken)
 }
@@ -156,12 +156,12 @@ func (s *GitLabService) GetProjectByPath(baseURL, projectPath, accessToken strin
 	// URL编码项目路径
 	encodedPath := url.QueryEscape(projectPath)
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%s", baseURL, encodedPath)
-	
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %v", err)
 	}
-	
+
 	// 设置认证头
 	if accessToken != "" {
 		// GitLab支持多种token格式
@@ -171,15 +171,15 @@ func (s *GitLabService) GetProjectByPath(baseURL, projectPath, accessToken strin
 			req.Header.Set("PRIVATE-TOKEN", accessToken)
 		}
 	}
-	
+
 	req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
-	
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	// 处理不同的HTTP状态码
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -195,12 +195,12 @@ func (s *GitLabService) GetProjectByPath(baseURL, projectPath, accessToken strin
 	default:
 		return nil, fmt.Errorf("GitLab API返回错误状态: %d", resp.StatusCode)
 	}
-	
+
 	var project GitLabProjectInfo
 	if err := json.NewDecoder(resp.Body).Decode(&project); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %v", err)
 	}
-	
+
 	return &project, nil
 }
 
@@ -212,12 +212,12 @@ func (s *GitLabService) GetProject(projectID int) (*GitLabProjectInfo, error) {
 // TestConnection 测试GitLab连接和token有效性
 func (s *GitLabService) TestConnection(baseURL, accessToken string) error {
 	apiURL := fmt.Sprintf("%s/api/v4/user", baseURL)
-	
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return fmt.Errorf("创建请求失败: %v", err)
 	}
-	
+
 	if accessToken != "" {
 		if strings.HasPrefix(accessToken, "glpat-") || strings.HasPrefix(accessToken, "glcbt-") {
 			req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -225,15 +225,15 @@ func (s *GitLabService) TestConnection(baseURL, accessToken string) error {
 			req.Header.Set("PRIVATE-TOKEN", accessToken)
 		}
 	}
-	
+
 	req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
-	
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("连接失败: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return nil
@@ -249,20 +249,20 @@ func (s *GitLabService) TestConnection(baseURL, accessToken string) error {
 // GetGroupProjects 获取组下所有项目（包括子组项目）
 func (s *GitLabService) GetGroupProjects(baseURL, groupPath, accessToken string) ([]*GitLabProjectInfo, error) {
 	var allProjects []*GitLabProjectInfo
-	
+
 	// 获取组直接下的项目
 	projects, err := s.getGroupDirectProjects(baseURL, groupPath, accessToken)
 	if err != nil {
 		return nil, err
 	}
 	allProjects = append(allProjects, projects...)
-	
+
 	// 获取子组
 	subgroups, err := s.getSubgroups(baseURL, groupPath, accessToken)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 递归获取子组的项目
 	for _, subgroup := range subgroups {
 		subgroupProjects, err := s.GetGroupProjects(baseURL, subgroup.FullPath, accessToken)
@@ -272,7 +272,7 @@ func (s *GitLabService) GetGroupProjects(baseURL, groupPath, accessToken string)
 		}
 		allProjects = append(allProjects, subgroupProjects...)
 	}
-	
+
 	return allProjects, nil
 }
 
@@ -280,20 +280,20 @@ func (s *GitLabService) GetGroupProjects(baseURL, groupPath, accessToken string)
 func (s *GitLabService) getGroupDirectProjects(baseURL, groupPath, accessToken string) ([]*GitLabProjectInfo, error) {
 	encodedPath := url.QueryEscape(groupPath)
 	apiURL := fmt.Sprintf("%s/api/v4/groups/%s/projects", baseURL, encodedPath)
-	
+
 	var allProjects []*GitLabProjectInfo
 	page := 1
 	perPage := 100
-	
+
 	for {
 		// 添加分页参数
 		paginatedURL := fmt.Sprintf("%s?page=%d&per_page=%d&simple=false", apiURL, page, perPage)
-		
+
 		req, err := http.NewRequest("GET", paginatedURL, nil)
 		if err != nil {
 			return nil, fmt.Errorf("创建请求失败: %v", err)
 		}
-		
+
 		// 设置认证头
 		if accessToken != "" {
 			if strings.HasPrefix(accessToken, "glpat-") || strings.HasPrefix(accessToken, "glcbt-") {
@@ -302,15 +302,15 @@ func (s *GitLabService) getGroupDirectProjects(baseURL, groupPath, accessToken s
 				req.Header.Set("PRIVATE-TOKEN", accessToken)
 			}
 		}
-		
+
 		req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
-		
+
 		resp, err := s.client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("请求失败: %v", err)
 		}
 		defer resp.Body.Close()
-		
+
 		// 处理HTTP状态码
 		switch resp.StatusCode {
 		case http.StatusOK:
@@ -324,24 +324,24 @@ func (s *GitLabService) getGroupDirectProjects(baseURL, groupPath, accessToken s
 		default:
 			return nil, fmt.Errorf("GitLab API返回错误状态: %d", resp.StatusCode)
 		}
-		
+
 		var projects []GitLabProjectInfo
 		if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
 			return nil, fmt.Errorf("解析响应失败: %v", err)
 		}
-		
+
 		// 转换为指针数组
 		for i := range projects {
 			allProjects = append(allProjects, &projects[i])
 		}
-		
+
 		// 检查是否还有更多页面
 		if len(projects) < perPage {
 			break
 		}
 		page++
 	}
-	
+
 	return allProjects, nil
 }
 
@@ -349,12 +349,12 @@ func (s *GitLabService) getGroupDirectProjects(baseURL, groupPath, accessToken s
 func (s *GitLabService) getSubgroups(baseURL, groupPath, accessToken string) ([]*GitLabGroupInfo, error) {
 	encodedPath := url.QueryEscape(groupPath)
 	apiURL := fmt.Sprintf("%s/api/v4/groups/%s/subgroups", baseURL, encodedPath)
-	
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %v", err)
 	}
-	
+
 	// 设置认证头
 	if accessToken != "" {
 		if strings.HasPrefix(accessToken, "glpat-") || strings.HasPrefix(accessToken, "glcbt-") {
@@ -363,30 +363,30 @@ func (s *GitLabService) getSubgroups(baseURL, groupPath, accessToken string) ([]
 			req.Header.Set("PRIVATE-TOKEN", accessToken)
 		}
 	}
-	
+
 	req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
-	
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return []*GitLabGroupInfo{}, nil // 没有子组或无权限访问，返回空数组
 	}
-	
+
 	var groups []GitLabGroupInfo
 	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %v", err)
 	}
-	
+
 	// 转换为指针数组
 	var result []*GitLabGroupInfo
 	for i := range groups {
 		result = append(result, &groups[i])
 	}
-	
+
 	return result, nil
 }
 
@@ -394,12 +394,12 @@ func (s *GitLabService) getSubgroups(baseURL, groupPath, accessToken string) ([]
 func (s *GitLabService) GetGroupByPath(baseURL, groupPath, accessToken string) (*GitLabGroupInfo, error) {
 	encodedPath := url.QueryEscape(groupPath)
 	apiURL := fmt.Sprintf("%s/api/v4/groups/%s", baseURL, encodedPath)
-	
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %v", err)
 	}
-	
+
 	// 设置认证头
 	if accessToken != "" {
 		if strings.HasPrefix(accessToken, "glpat-") || strings.HasPrefix(accessToken, "glcbt-") {
@@ -408,15 +408,15 @@ func (s *GitLabService) GetGroupByPath(baseURL, groupPath, accessToken string) (
 			req.Header.Set("PRIVATE-TOKEN", accessToken)
 		}
 	}
-	
+
 	req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
-	
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	// 处理不同的HTTP状态码
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -430,12 +430,12 @@ func (s *GitLabService) GetGroupByPath(baseURL, groupPath, accessToken string) (
 	default:
 		return nil, fmt.Errorf("GitLab API返回错误状态: %d", resp.StatusCode)
 	}
-	
+
 	var group GitLabGroupInfo
 	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %v", err)
 	}
-	
+
 	return &group, nil
 }
 
@@ -445,11 +445,11 @@ func (s *GitLabService) ValidateProjectURL(projectURL string) (int, error) {
 	if !parsed.IsValid {
 		return 0, fmt.Errorf(parsed.Error)
 	}
-	
+
 	project, err := s.GetProjectByPath(parsed.BaseURL, parsed.ProjectPath, s.accessToken)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return project.ID, nil
 }

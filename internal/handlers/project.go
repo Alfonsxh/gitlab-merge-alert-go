@@ -207,7 +207,7 @@ func (h *Handler) TestGitLabConnection(c *gin.Context) {
 
 	// 测试连接
 	err := h.gitlabService.TestConnection(parsed.BaseURL, req.AccessToken)
-	
+
 	response := models.GitLabConnectionTestResponse{}
 	if err != nil {
 		response.Success = false
@@ -244,7 +244,7 @@ func (h *Handler) ScanGroupProjects(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "无法识别为组或项目: " + err.Error()})
 			return
 		}
-		
+
 		// 是单个项目，返回单个项目信息
 		response := models.ScanGroupProjectsResponse{
 			GroupInfo: nil,

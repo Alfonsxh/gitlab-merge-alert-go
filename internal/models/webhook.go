@@ -15,9 +15,9 @@ type Webhook struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
-	
+
 	// 关联关系
-	Projects    []Project      `json:"projects,omitempty" gorm:"many2many:project_webhooks;"`
+	Projects []Project `json:"projects,omitempty" gorm:"many2many:project_webhooks;"`
 }
 
 type ProjectWebhook struct {
@@ -25,10 +25,10 @@ type ProjectWebhook struct {
 	ProjectID uint      `json:"project_id" gorm:"not null"`
 	WebhookID uint      `json:"webhook_id" gorm:"not null"`
 	CreatedAt time.Time `json:"created_at"`
-	
+
 	// 关联关系
-	Project   Project   `json:"project" gorm:"foreignKey:ProjectID"`
-	Webhook   Webhook   `json:"webhook" gorm:"foreignKey:WebhookID"`
+	Project Project `json:"project" gorm:"foreignKey:ProjectID"`
+	Webhook Webhook `json:"webhook" gorm:"foreignKey:WebhookID"`
 }
 
 type CreateWebhookRequest struct {
@@ -46,13 +46,13 @@ type UpdateWebhookRequest struct {
 }
 
 type WebhookResponse struct {
-	ID          uint      `json:"id"`
-	Name        string    `json:"name"`
-	URL         string    `json:"url"`
-	Description string    `json:"description"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uint              `json:"id"`
+	Name        string            `json:"name"`
+	URL         string            `json:"url"`
+	Description string            `json:"description"`
+	IsActive    bool              `json:"is_active"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
 	Projects    []ProjectResponse `json:"projects,omitempty"`
 }
 
