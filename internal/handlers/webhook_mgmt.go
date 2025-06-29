@@ -230,9 +230,7 @@ func (h *Handler) WebhooksPage(c *gin.Context) {
 
 	if err := h.renderTemplate(c, "webhooks.html", data); err != nil {
 		logger.GetLogger().Errorf("Failed to render webhooks template: %v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
-			"error": "Failed to load webhooks page",
-		})
+		h.renderErrorPage(c, "Webhook管理页面加载失败")
 		return
 	}
 }

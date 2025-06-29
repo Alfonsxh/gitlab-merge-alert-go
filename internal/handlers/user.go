@@ -133,9 +133,7 @@ func (h *Handler) UsersPage(c *gin.Context) {
 
 	if err := h.renderTemplate(c, "users.html", data); err != nil {
 		logger.GetLogger().Errorf("Failed to render users template: %v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
-			"error": "Failed to load users page",
-		})
+		h.renderErrorPage(c, "用户管理页面加载失败")
 		return
 	}
 }

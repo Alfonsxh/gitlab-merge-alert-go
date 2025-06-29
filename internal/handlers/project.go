@@ -438,9 +438,7 @@ func (h *Handler) ProjectsPage(c *gin.Context) {
 
 	if err := h.renderTemplate(c, "projects.html", data); err != nil {
 		logger.GetLogger().Errorf("Failed to render projects template: %v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
-			"error": "Failed to load projects page",
-		})
+		h.renderErrorPage(c, "项目管理页面加载失败")
 		return
 	}
 }

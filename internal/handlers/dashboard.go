@@ -95,9 +95,7 @@ func (h *Handler) Dashboard(c *gin.Context) {
 
 	if err := h.renderTemplate(c, "dashboard.html", data); err != nil {
 		logger.GetLogger().Errorf("Failed to render dashboard template: %v", err)
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
-			"error": "Failed to load dashboard",
-		})
+		h.renderErrorPage(c, "仪表板页面加载失败")
 		return
 	}
 }
