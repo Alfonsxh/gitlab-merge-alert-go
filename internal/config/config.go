@@ -10,7 +10,7 @@ type Config struct {
 	Environment              string `mapstructure:"environment"`
 	LogLevel                 string `mapstructure:"log_level"`
 	DatabasePath             string `mapstructure:"database_path"`
-	GitLabURLPrefix          string `mapstructure:"gitlab_url_prefix"`
+	GitLabURL                string `mapstructure:"gitlab_url"`
 	RedirectServerURL        string `mapstructure:"redirect_server_url"`
 	DefaultWebhookURL        string `mapstructure:"default_webhook_url"`
 	GitLabPersonalAccessToken string `mapstructure:"gitlab_personal_access_token"`
@@ -29,7 +29,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("log_level", "info")
 	viper.SetDefault("database_path", "./data/gitlab-merge-alert.db")
-	viper.SetDefault("gitlab_url_prefix", "https://gitlab.woqutech.com")
+	viper.SetDefault("gitlab_url", "https://gitlab.woqutech.com")
 	viper.SetDefault("redirect_server_url", "http://localhost:1688")
 
 	// 环境变量绑定

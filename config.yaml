@@ -3,6 +3,6 @@ port: 1688
 environment: development
 log_level: info
 database_path: ./data/gitlab-merge-alert.db
-gitlab_url_prefix: https://your-gitlab-server.com
+gitlab_url: https://your-gitlab-server.com
 redirect_server_url: http://localhost:1688
 default_webhook_url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-WEBHOOK-KEY

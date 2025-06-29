@@ -89,6 +89,16 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			projects.POST("", h.CreateProject)
 			projects.PUT("/:id", h.UpdateProject)
 			projects.DELETE("/:id", h.DeleteProject)
+			projects.POST("/parse-url", h.ParseProjectURL)
+			projects.POST("/scan-group", h.ScanGroupProjects)
+			projects.POST("/batch-create", h.BatchCreateProjects)
+		}
+
+		// GitLab相关API
+		gitlab := api.Group("/gitlab")
+		{
+			gitlab.POST("/test-connection", h.TestGitLabConnection)
+			gitlab.GET("/config", h.GetGitLabConfig)
 		}
 
 		// Webhook管理API

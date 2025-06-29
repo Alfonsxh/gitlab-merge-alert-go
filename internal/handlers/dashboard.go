@@ -5,16 +5,17 @@ import (
 	"time"
 
 	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Stats struct {
-	TotalUsers         int64 `json:"total_users"`
-	TotalProjects      int64 `json:"total_projects"`
-	TotalWebhooks      int64 `json:"total_webhooks"`
-	TotalNotifications int64 `json:"total_notifications"`
-	RecentNotifications int64 `json:"recent_notifications"`
+	TotalUsers              int64 `json:"total_users"`
+	TotalProjects           int64 `json:"total_projects"`
+	TotalWebhooks           int64 `json:"total_webhooks"`
+	TotalNotifications      int64 `json:"total_notifications"`
+	RecentNotifications     int64 `json:"recent_notifications"`
 	SuccessfulNotifications int64 `json:"successful_notifications"`
 }
 
@@ -86,11 +87,12 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 
 func (h *Handler) Dashboard(c *gin.Context) {
 	logger.GetLogger().Infof("Dashboard access from %s", c.ClientIP())
-	
+
 	data := gin.H{
-		"title": "GitLab Merge Alert Dashboard",
+		"title":       "GitLab Merge Alert Dashboard",
+		"currentPage": "dashboard",
 	}
-	
+
 	if err := h.renderTemplate(c, "dashboard.html", data); err != nil {
 		logger.GetLogger().Errorf("Failed to render dashboard template: %v", err)
 		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
@@ -100,13 +102,3 @@ func (h *Handler) Dashboard(c *gin.Context) {
 	}
 }
 
-func (h *Handler) renderTemplate(c *gin.Context, templateName string, data gin.H) error {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.GetLogger().Errorf("Template rendering panic: %v", r)
-		}
-	}()
-	
-	c.HTML(http.StatusOK, templateName, data)
-	return nil
-}

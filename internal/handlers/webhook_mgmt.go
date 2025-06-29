@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -222,7 +223,16 @@ func (h *Handler) UnlinkProjectWebhook(c *gin.Context) {
 }
 
 func (h *Handler) WebhooksPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "webhooks.html", gin.H{
-		"title": "Webhook管理",
-	})
+	data := gin.H{
+		"title":       "Webhook管理",
+		"currentPage": "webhooks",
+	}
+
+	if err := h.renderTemplate(c, "webhooks.html", data); err != nil {
+		logger.GetLogger().Errorf("Failed to render webhooks template: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
+			"error": "Failed to load webhooks page",
+		})
+		return
+	}
 }

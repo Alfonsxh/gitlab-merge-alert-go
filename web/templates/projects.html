@@ -58,22 +58,22 @@
                 <div class="position-sticky pt-3">
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="/">
+                            <a class="nav-link{{if eq .currentPage "dashboard"}} active{{end}}" href="/">
                                 <i class="bi bi-house"></i> 仪表板
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/users">
+                            <a class="nav-link{{if eq .currentPage "users"}} active{{end}}" href="/users">
                                 <i class="bi bi-people"></i> 用户管理
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link active" href="/projects">
+                            <a class="nav-link{{if eq .currentPage "projects"}} active{{end}}" href="/projects">
                                 <i class="bi bi-folder"></i> 项目管理
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/webhooks">
+                            <a class="nav-link{{if eq .currentPage "webhooks"}} active{{end}}" href="/webhooks">
                                 <i class="bi bi-webhook"></i> Webhook管理
                             </a>
                         </li>
@@ -134,6 +134,15 @@
                                 </button>
                             </td>
                         </tr>
+                        <tr v-if="projects.length === 0">
+                            <td colspan="7" class="text-center py-4">
+                                <div class="text-muted">
+                                    <i class="bi bi-folder-x fs-1 mb-3 d-block"></i>
+                                    <p class="mb-2">还没有添加任何项目</p>
+                                    <p class="small">点击上方的"添加项目"按钮开始添加项目</p>
+                                </div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -142,43 +151,421 @@
 
     <!-- 添加/编辑项目模态框 -->
     <div class="modal fade" id="projectModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" v-text="isEditing ? '编辑项目' : '添加项目'">项目管理</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form @submit.prevent="saveProject">
-                        <div class="mb-3">
-                            <label for="gitlab_project_id" class="form-label">GitLab项目ID *</label>
-                            <input type="number" class="form-control" id="gitlab_project_id" v-model="currentProject.gitlab_project_id" required>
-                            <div class="form-text">从GitLab项目URL中获取项目ID</div>
+                    <!-- 步骤指示器 -->
+                    <div class="mb-4" v-if="!isEditing">
+                        <div class="progress" style="height: 4px;">
+                            <div class="progress-bar" role="progressbar" :style="{width: getProgressWidth()}"></div>
                         </div>
-                        <div class="mb-3">
-                            <label for="name" class="form-label">项目名称 *</label>
-                            <input type="text" class="form-control" id="name" v-model="currentProject.name" required>
+                        <div class="row mt-2" v-if="!isBatchMode">
+                            <div class="col-4 text-center">
+                                <small :class="urlParseStep === 'input' ? 'text-primary fw-bold' : 'text-muted'">1. 输入URL和Token</small>
+                            </div>
+                            <div class="col-4 text-center">
+                                <small :class="urlParseStep === 'parsing' ? 'text-primary fw-bold' : 'text-muted'">2. 解析项目信息</small>
+                            </div>
+                            <div class="col-4 text-center">
+                                <small :class="urlParseStep === 'confirm' ? 'text-primary fw-bold' : 'text-muted'">3. 确认保存</small>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="url" class="form-label">项目URL *</label>
-                            <input type="url" class="form-control" id="url" v-model="currentProject.url" required>
-                            <div class="form-text">GitLab项目的完整URL</div>
+                        <div class="row mt-2" v-else>
+                            <div class="col-3 text-center">
+                                <small :class="urlParseStep === 'input' ? 'text-primary fw-bold' : 'text-muted'">1. 输入URL和Token</small>
+                            </div>
+                            <div class="col-3 text-center">
+                                <small :class="urlParseStep === 'parsing' ? 'text-primary fw-bold' : 'text-muted'">2. 扫描组项目</small>
+                            </div>
+                            <div class="col-3 text-center">
+                                <small :class="urlParseStep === 'batch_select' ? 'text-primary fw-bold' : 'text-muted'">3. 选择项目和配置</small>
+                            </div>
+                            <div class="col-3 text-center">
+                                <small :class="urlParseStep === 'confirm' ? 'text-primary fw-bold' : 'text-muted'">4. 批量创建</small>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="description" class="form-label">描述</label>
-                            <textarea class="form-control" id="description" v-model="currentProject.description" rows="3"></textarea>
+                    </div>
+
+                    <!-- 第一步：URL和Token输入 -->
+                    <div v-if="!isEditing && urlParseStep === 'input'">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            输入GitLab项目或组URL和访问令牌，系统将自动识别并获取信息
+                            <br><small>• 项目URL: https://gitlab.com/group/project</small>
+                            <br><small>• 组URL: https://gitlab.com/group（将扫描组下所有项目）</small>
                         </div>
+                        
                         <div class="mb-3">
-                            <label for="access_token" class="form-label">访问令牌</label>
-                            <input type="password" class="form-control" id="access_token" v-model="currentProject.access_token">
-                            <div class="form-text">GitLab个人访问令牌（可选）</div>
+                            <label for="gitlab_url" class="form-label">GitLab项目或组URL *</label>
+                            <input type="url" class="form-control" id="gitlab_url" v-model="urlParseForm.url" 
+                                   placeholder="https://gitlab.com/group/project 或 https://gitlab.com/group" required>
+                            <div class="form-text">支持GitLab.com或私有GitLab实例的项目URL或组URL</div>
                         </div>
-                    </form>
+                        
+                        <div class="mb-3">
+                            <label for="gitlab_token" class="form-label">
+                                GitLab个人访问令牌 *
+                                <button type="button" class="btn btn-link btn-sm p-0 ms-1" @click="showTokenHelp = !showTokenHelp">
+                                    <i class="bi bi-question-circle"></i>
+                                </button>
+                                <a v-if="configGitlabTokenUrl" :href="configGitlabTokenUrl" target="_blank" class="btn btn-link btn-sm p-0 ms-1">
+                                    <i class="bi bi-box-arrow-up-right"></i> 生成令牌
+                                </a>
+                            </label>
+                            <div class="input-group">
+                                <input :type="showToken ? 'text' : 'password'" class="form-control" id="gitlab_token" 
+                                       v-model="urlParseForm.access_token" placeholder="glpat-xxxxxxxxxxxx" required>
+                                <button type="button" class="btn btn-outline-secondary" @click="showToken = !showToken">
+                                    <i :class="showToken ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">需要 read_api 权限的个人访问令牌</div>
+                        </div>
+
+                        <!-- Token帮助信息 -->
+                        <div v-if="showTokenHelp" class="alert alert-light border">
+                            <h6><i class="bi bi-lightbulb me-2"></i>如何获取GitLab个人访问令牌？</h6>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <ol class="mb-0">
+                                        <li>登录GitLab，进入 "用户设置" → "访问令牌"</li>
+                                        <li>创建新的个人访问令牌</li>
+                                        <li>选择权限：至少需要 <code>read_api</code> 和 <code>read_repository</code></li>
+                                        <li>复制生成的令牌（以glpat-开头）</li>
+                                    </ol>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <a v-if="configGitlabTokenUrl" :href="configGitlabTokenUrl" target="_blank" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>
+                                        直接前往生成
+                                    </a>
+                                    <small v-else class="text-muted d-block">GitLab配置加载中...</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 连接测试结果 -->
+                        <div v-if="connectionTestResult" class="alert" :class="connectionTestResult.success ? 'alert-success' : 'alert-danger'">
+                            <i :class="connectionTestResult.success ? 'bi bi-check-circle' : 'bi bi-exclamation-triangle'" class="me-2"></i>
+                            <span v-text="connectionTestResult.message"></span>
+                        </div>
+                    </div>
+
+                    <!-- 第二步：解析中状态 -->
+                    <div v-if="!isEditing && urlParseStep === 'parsing'" class="text-center py-4">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">扫描中...</span>
+                        </div>
+                        <h5>正在扫描GitLab...</h5>
+                        <p class="text-muted">正在识别URL类型并获取相关信息，请稍候...</p>
+                        <div class="progress" style="width: 200px; margin: 0 auto;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <!-- 第三步：批量项目选择和配置 -->
+                    <div v-if="!isEditing && urlParseStep === 'batch_select'">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            <span v-if="scannedData.group_info">
+                                成功扫描到组 "<strong v-text="scannedData.group_info.name"></strong>" 
+                                下共 <strong v-text="scannedData.projects.length"></strong> 个项目
+                            </span>
+                            <span v-else>扫描完成，请选择要添加的项目</span>
+                        </div>
+
+                        <!-- 项目选择 -->
+                        <div class="card mb-4">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">选择项目</h6>
+                                <div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-2" @click="selectAllProjects">全选</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="deselectAllProjects">取消全选</button>
+                                </div>
+                            </div>
+                            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                                <div class="row">
+                                    <div class="col-md-6" v-for="project in scannedData.projects" :key="project.id">
+                                        <div class="card border mb-2" :class="project.selected ? 'border-primary bg-light' : ''">
+                                            <div class="card-body p-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           :id="'project-' + project.id" v-model="project.selected">
+                                                    <label class="form-check-label w-100" :for="'project-' + project.id">
+                                                        <strong v-text="project.name"></strong>
+                                                        <br>
+                                                        <small class="text-muted" v-text="project.path_with_namespace"></small>
+                                                        <br>
+                                                        <small class="text-secondary" v-text="project.description || '无描述'"></small>
+                                                        <div class="mt-1">
+                                                            <span class="badge" :class="project.visibility === 'public' ? 'bg-success' : project.visibility === 'internal' ? 'bg-warning' : 'bg-secondary'" v-text="project.visibility"></span>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="scannedData.projects.length === 0" class="text-center text-muted py-4">
+                                    <i class="bi bi-folder-x fs-1 text-muted"></i>
+                                    <p class="mt-2">没有找到任何项目</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Webhook配置 -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Webhook配置</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="use_unified" v-model="batchWebhookConfig.use_unified">
+                                    <label class="form-check-label" for="use_unified">
+                                        使用统一Webhook（所有选中项目使用相同的Webhook）
+                                    </label>
+                                </div>
+
+                                <!-- 统一Webhook配置 -->
+                                <div v-if="batchWebhookConfig.use_unified">
+                                    <div class="mb-3">
+                                        <label class="form-label">选择现有Webhook</label>
+                                        <select class="form-select" v-model="batchWebhookConfig.unified_webhook_id">
+                                            <option value="">选择一个现有的Webhook</option>
+                                            <option v-for="webhook in allWebhooks" :key="webhook.id" :value="webhook.id" v-text="webhook.name + ' - ' + webhook.url">
+                                            </option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="text-center my-3">
+                                        <span class="text-muted">-- 或者 --</span>
+                                    </div>
+
+                                    <div class="border rounded p-3">
+                                        <h6>创建新的Webhook</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">名称</label>
+                                            <input type="text" class="form-control" v-model="batchWebhookConfig.new_webhook.name" 
+                                                   placeholder="例如: 开发团队通知群">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Webhook URL</label>
+                                            <input type="url" class="form-control" v-model="batchWebhookConfig.new_webhook.url" 
+                                                   placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">描述</label>
+                                            <textarea class="form-control" v-model="batchWebhookConfig.new_webhook.description" 
+                                                      rows="2" placeholder="描述这个Webhook的用途"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 单独配置提示 -->
+                                <div v-else class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    取消统一配置后，项目将先创建，您可以稍后在项目管理页面单独为每个项目配置Webhook
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 第四步/第三步：确认项目信息 -->
+                    <div v-if="!isEditing && urlParseStep === 'confirm' && !isBatchMode">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            项目信息解析成功！请确认以下信息
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">GitLab项目ID</label>
+                                    <input type="text" class="form-control" :value="parsedProjectInfo.gitlab_project_id" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="parsed_name" class="form-label">项目名称 *</label>
+                                    <input type="text" class="form-control" id="parsed_name" v-model="parsedProjectInfo.name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">项目路径</label>
+                                    <input type="text" class="form-control" :value="parsedProjectInfo.path_with_namespace" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">项目URL</label>
+                                    <input type="text" class="form-control" :value="parsedProjectInfo.web_url" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="parsed_description" class="form-label">项目描述</label>
+                                    <textarea class="form-control" id="parsed_description" v-model="parsedProjectInfo.description" rows="3"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">可见性</label>
+                                    <input type="text" class="form-control" :value="parsedProjectInfo.visibility" readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="save_token" v-model="saveAccessToken">
+                                <label class="form-check-label" for="save_token">
+                                    保存访问令牌到项目中（用于后续webhook验证）
+                                </label>
+                                <div class="form-text">访问令牌将加密存储，仅用于验证webhook合法性</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 批量创建确认页面 -->
+                    <div v-if="!isEditing && urlParseStep === 'confirm' && isBatchMode">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            即将批量创建 <strong v-text="selectedProjectsCount"></strong> 个项目
+                        </div>
+
+                        <!-- 选中的项目列表 -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">选中的项目</h6>
+                            </div>
+                            <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                                <div class="row">
+                                    <div class="col-md-6" v-for="project in scannedData.projects.filter(p => p.selected)" :key="project.id">
+                                        <div class="card border-0 bg-light mb-2">
+                                            <div class="card-body p-2">
+                                                <h6 class="card-title mb-1" v-text="project.name"></h6>
+                                                <small class="text-muted" v-text="project.path_with_namespace"></small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Webhook配置摘要 -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Webhook配置摘要</h6>
+                            </div>
+                            <div class="card-body">
+                                <div v-if="batchWebhookConfig.use_unified">
+                                    <div v-if="batchWebhookConfig.unified_webhook_id">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-link me-2 text-success"></i>
+                                            <span>使用现有Webhook: </span>
+                                            <span v-for="webhook in allWebhooks" :key="webhook.id" v-if="webhook.id == batchWebhookConfig.unified_webhook_id">
+                                                <strong v-text="webhook.name"></strong>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div v-else-if="batchWebhookConfig.new_webhook.name && batchWebhookConfig.new_webhook.url">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-plus-circle me-2 text-primary"></i>
+                                            <span>创建新Webhook: <strong v-text="batchWebhookConfig.new_webhook.name"></strong></span>
+                                        </div>
+                                    </div>
+                                    <div v-else>
+                                        <div class="d-flex align-items-center text-warning">
+                                            <i class="bi bi-exclamation-triangle me-2"></i>
+                                            <span>未配置Webhook - 项目将创建但不关联任何Webhook</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-else>
+                                    <div class="d-flex align-items-center text-info">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        <span>不使用统一配置 - 项目将创建，可稍后单独配置Webhook</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 编辑模式的传统表单 -->
+                    <div v-if="isEditing">
+                        <form @submit.prevent="saveProject">
+                            <div class="mb-3">
+                                <label for="edit_gitlab_project_id" class="form-label">GitLab项目ID *</label>
+                                <input type="number" class="form-control" id="edit_gitlab_project_id" v-model="currentProject.gitlab_project_id" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="edit_name" class="form-label">项目名称 *</label>
+                                <input type="text" class="form-control" id="edit_name" v-model="currentProject.name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="edit_url" class="form-label">项目URL *</label>
+                                <input type="url" class="form-control" id="edit_url" v-model="currentProject.url" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="edit_description" class="form-label">描述</label>
+                                <textarea class="form-control" id="edit_description" v-model="currentProject.description" rows="3"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="edit_access_token" class="form-label">访问令牌</label>
+                                <input type="password" class="form-control" id="edit_access_token" v-model="currentProject.access_token">
+                                <div class="form-text">留空表示不更改现有令牌</div>
+                            </div>
+                        </form>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" @click="saveProject" v-text="isEditing ? '更新' : '添加'">
-                        保存
+                    
+                    <!-- 第一步的按钮 -->
+                    <div v-if="!isEditing && urlParseStep === 'input'">
+                        <button type="button" class="btn btn-outline-primary me-2" @click="testConnection" :disabled="!urlParseForm.url || !urlParseForm.access_token || connectionTesting">
+                            <span v-if="connectionTesting" class="spinner-border spinner-border-sm me-2"></span>
+                            测试连接
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="parseProjectURL" :disabled="!urlParseForm.url || !urlParseForm.access_token || urlParsing">
+                            <span v-if="urlParsing" class="spinner-border spinner-border-sm me-2"></span>
+                            开始扫描
+                        </button>
+                    </div>
+                    
+                    <!-- 批量选择步骤的按钮 -->
+                    <div v-if="!isEditing && urlParseStep === 'batch_select'">
+                        <button type="button" class="btn btn-outline-secondary me-2" @click="urlParseStep = 'input'">
+                            重新扫描
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="proceedToBatchConfirm" :disabled="!hasSelectedProjects">
+                            下一步：确认创建 (<span v-text="selectedProjectsCount"></span> 个项目)
+                        </button>
+                    </div>
+                    
+                    <!-- 批量确认步骤的按钮 -->
+                    <div v-if="!isEditing && urlParseStep === 'confirm' && isBatchMode">
+                        <button type="button" class="btn btn-outline-secondary me-2" @click="urlParseStep = 'batch_select'">
+                            返回选择
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="batchCreateProjects" :disabled="projectSaving">
+                            <span v-if="projectSaving" class="spinner-border spinner-border-sm me-2"></span>
+                            批量创建项目
+                        </button>
+                    </div>
+
+                    <!-- 单个项目确认步骤的按钮 -->
+                    <div v-if="!isEditing && urlParseStep === 'confirm' && !isBatchMode">
+                        <button type="button" class="btn btn-outline-secondary me-2" @click="urlParseStep = 'input'">
+                            返回修改
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="saveProject" :disabled="projectSaving">
+                            <span v-if="projectSaving" class="spinner-border spinner-border-sm me-2"></span>
+                            保存项目
+                        </button>
+                    </div>
+                    
+                    <!-- 编辑模式的按钮 -->
+                    <button v-if="isEditing" type="button" class="btn btn-primary" @click="saveProject" :disabled="projectSaving">
+                        <span v-if="projectSaving" class="spinner-border spinner-border-sm me-2"></span>
+                        更新项目
                     </button>
                 </div>
             </div>
@@ -218,17 +605,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // 高亮当前页面的导航链接
-        document.addEventListener('DOMContentLoaded', function() {
-            const currentPath = window.location.pathname;
-            const navLinks = document.querySelectorAll('.nav-link');
-            navLinks.forEach(link => {
-                if (link.getAttribute('href') === currentPath) {
-                    link.classList.add('active');
-                }
-            });
-        });
-
         // Vue.js 应用
         const { createApp } = Vue;
 
@@ -246,7 +622,85 @@
                         access_token: ''
                     },
                     selectedProject: null,
-                    isEditing: false
+                    isEditing: false,
+                    
+                    // URL解析相关的状态
+                    urlParseStep: 'input', // 'input', 'parsing', 'confirm', 'batch_select'
+                    urlParseForm: {
+                        url: '',
+                        access_token: ''
+                    },
+                    parsedProjectInfo: {
+                        gitlab_project_id: null,
+                        name: '',
+                        description: '',
+                        web_url: '',
+                        path_with_namespace: '',
+                        default_branch: '',
+                        visibility: ''
+                    },
+                    
+                    // 批量导入相关状态
+                    scannedData: {
+                        group_info: null,
+                        projects: []
+                    },
+                    batchWebhookConfig: {
+                        use_unified: true,
+                        unified_webhook_id: null,
+                        new_webhook: {
+                            name: '',
+                            url: '',
+                            description: '',
+                            is_active: true
+                        },
+                        project_webhooks: []
+                    },
+                    isBatchMode: false,
+                    
+                    // UI状态控制
+                    showToken: false,
+                    showTokenHelp: false,
+                    saveAccessToken: false,
+                    urlParsing: false,
+                    connectionTesting: false,
+                    projectSaving: false,
+                    connectionTestResult: null,
+                    gitlabConfig: null
+                }
+            },
+            computed: {
+                configGitlabTokenUrl() {
+                    if (!this.gitlabConfig || !this.gitlabConfig.gitlab_url) {
+                        return null;
+                    }
+                    
+                    try {
+                        const url = new URL(this.gitlabConfig.gitlab_url);
+                        return `${url.protocol}//${url.host}/-/profile/personal_access_tokens`;
+                    } catch (e) {
+                        return null;
+                    }
+                },
+                selectedProjectsCount() {
+                    return this.scannedData.projects.filter(p => p.selected).length;
+                },
+                hasSelectedProjects() {
+                    return this.selectedProjectsCount > 0;
+                },
+                getProgressWidth() {
+                    if (this.isBatchMode) {
+                        // 批量模式：4步
+                        if (this.urlParseStep === 'input') return '25%';
+                        if (this.urlParseStep === 'parsing') return '50%';
+                        if (this.urlParseStep === 'batch_select') return '75%';
+                        return '100%';
+                    } else {
+                        // 单项目模式：3步
+                        if (this.urlParseStep === 'input') return '33%';
+                        if (this.urlParseStep === 'parsing') return '66%';
+                        return '100%';
+                    }
                 }
             },
             methods: {
@@ -259,6 +713,14 @@
                         alert('加载项目列表失败');
                     }
                 },
+                async loadGitLabConfig() {
+                    try {
+                        const response = await axios.get('/api/v1/gitlab/config');
+                        this.gitlabConfig = response.data.data;
+                    } catch (error) {
+                        console.error('Failed to load GitLab config:', error);
+                    }
+                },
                 async loadWebhooks() {
                     try {
                         const response = await axios.get('/api/v1/webhooks');
@@ -268,6 +730,27 @@
                     }
                 },
                 showAddModal() {
+                    // 重置所有状态
+                    this.resetAddProjectState();
+                    this.isEditing = false;
+                    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+                    modal.show();
+                },
+                resetAddProjectState() {
+                    this.urlParseStep = 'input';
+                    this.urlParseForm = {
+                        url: '',
+                        access_token: ''
+                    };
+                    this.parsedProjectInfo = {
+                        gitlab_project_id: null,
+                        name: '',
+                        description: '',
+                        web_url: '',
+                        path_with_namespace: '',
+                        default_branch: '',
+                        visibility: ''
+                    };
                     this.currentProject = {
                         id: null,
                         gitlab_project_id: '',
@@ -276,9 +759,126 @@
                         description: '',
                         access_token: ''
                     };
-                    this.isEditing = false;
-                    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
-                    modal.show();
+                    this.scannedData = {
+                        group_info: null,
+                        projects: []
+                    };
+                    this.batchWebhookConfig = {
+                        use_unified: true,
+                        unified_webhook_id: null,
+                        new_webhook: {
+                            name: '',
+                            url: '',
+                            description: '',
+                            is_active: true
+                        },
+                        project_webhooks: []
+                    };
+                    this.isBatchMode = false;
+                    this.showToken = false;
+                    this.showTokenHelp = false;
+                    this.saveAccessToken = false;
+                    this.urlParsing = false;
+                    this.connectionTesting = false;
+                    this.projectSaving = false;
+                    this.connectionTestResult = null;
+                },
+                selectAllProjects() {
+                    this.scannedData.projects.forEach(project => {
+                        project.selected = true;
+                    });
+                },
+                deselectAllProjects() {
+                    this.scannedData.projects.forEach(project => {
+                        project.selected = false;
+                    });
+                },
+                proceedToBatchConfirm() {
+                    if (!this.hasSelectedProjects) {
+                        alert('请至少选择一个项目');
+                        return;
+                    }
+                    
+                    // 验证webhook配置
+                    if (this.batchWebhookConfig.use_unified) {
+                        const hasExistingWebhook = this.batchWebhookConfig.unified_webhook_id;
+                        const hasNewWebhook = this.batchWebhookConfig.new_webhook.name && this.batchWebhookConfig.new_webhook.url;
+                        
+                        if (!hasExistingWebhook && !hasNewWebhook) {
+                            if (!confirm('未配置Webhook，项目将创建但不关联任何Webhook。确定要继续吗？')) {
+                                return;
+                            }
+                        }
+                    }
+                    
+                    this.urlParseStep = 'confirm';
+                },
+                async batchCreateProjects() {
+                    if (!this.hasSelectedProjects) {
+                        alert('请至少选择一个项目');
+                        return;
+                    }
+
+                    this.projectSaving = true;
+                    
+                    try {
+                        // 准备批量创建请求数据
+                        const selectedProjects = this.scannedData.projects.filter(p => p.selected);
+                        const projectData = selectedProjects.map(project => ({
+                            gitlab_project_id: project.id,
+                            name: project.name,
+                            url: project.web_url,
+                            description: project.description || ''
+                        }));
+
+                        // 准备webhook配置
+                        const webhookConfig = {
+                            use_unified: this.batchWebhookConfig.use_unified,
+                            unified_webhook_id: this.batchWebhookConfig.unified_webhook_id || null,
+                            new_webhook: null,
+                            project_webhooks: []
+                        };
+
+                        // 如果要创建新webhook且填写了信息
+                        if (this.batchWebhookConfig.use_unified && 
+                            this.batchWebhookConfig.new_webhook.name && 
+                            this.batchWebhookConfig.new_webhook.url) {
+                            webhookConfig.new_webhook = this.batchWebhookConfig.new_webhook;
+                            webhookConfig.unified_webhook_id = null; // 创建新的，不使用现有的
+                        }
+
+                        const requestData = {
+                            projects: projectData,
+                            access_token: this.urlParseForm.access_token,
+                            webhook_config: webhookConfig
+                        };
+
+                        const response = await axios.post('/api/v1/projects/batch-create', requestData);
+                        
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
+                        modal.hide();
+                        
+                        // 显示批量创建结果
+                        const result = response.data.data;
+                        let message = `批量创建完成！\n成功: ${result.success_count} 个项目\n失败: ${result.failure_count} 个项目`;
+                        
+                        if (result.failure_count > 0) {
+                            message += '\n\n失败的项目：';
+                            result.results.filter(r => !r.success).forEach(r => {
+                                message += `\n• ${r.name}: ${r.error}`;
+                            });
+                        }
+                        
+                        alert(message);
+                        
+                        await this.loadProjects();
+                        this.resetAddProjectState();
+                    } catch (error) {
+                        console.error('Failed to batch create projects:', error);
+                        alert('批量创建项目失败: ' + (error.response?.data?.error || error.message));
+                    } finally {
+                        this.projectSaving = false;
+                    }
                 },
                 editProject(project) {
                     this.currentProject = { ...project };
@@ -286,12 +886,93 @@
                     const modal = new bootstrap.Modal(document.getElementById('projectModal'));
                     modal.show();
                 },
+                async testConnection() {
+                    if (!this.urlParseForm.url || !this.urlParseForm.access_token) {
+                        return;
+                    }
+                    
+                    this.connectionTesting = true;
+                    this.connectionTestResult = null;
+                    
+                    try {
+                        const response = await axios.post('/api/v1/gitlab/test-connection', {
+                            url: this.urlParseForm.url,
+                            access_token: this.urlParseForm.access_token
+                        });
+                        
+                        this.connectionTestResult = response.data.data;
+                    } catch (error) {
+                        console.error('Failed to test connection:', error);
+                        this.connectionTestResult = {
+                            success: false,
+                            message: error.response?.data?.error || '连接测试失败'
+                        };
+                    } finally {
+                        this.connectionTesting = false;
+                    }
+                },
+                async parseProjectURL() {
+                    if (!this.urlParseForm.url || !this.urlParseForm.access_token) {
+                        return;
+                    }
+                    
+                    this.urlParsing = true;
+                    this.urlParseStep = 'parsing';
+                    
+                    try {
+                        // 首先尝试组扫描API
+                        const response = await axios.post('/api/v1/projects/scan-group', {
+                            url: this.urlParseForm.url,
+                            access_token: this.urlParseForm.access_token
+                        });
+                        
+                        this.scannedData = response.data.data;
+                        
+                        if (this.scannedData.group_info) {
+                            // 是组，进入批量选择模式
+                            this.isBatchMode = true;
+                            this.urlParseStep = 'batch_select';
+                        } else if (this.scannedData.projects && this.scannedData.projects.length === 1) {
+                            // 是单个项目，使用原有流程
+                            this.isBatchMode = false;
+                            const project = this.scannedData.projects[0];
+                            this.parsedProjectInfo = {
+                                gitlab_project_id: project.id,
+                                name: project.name,
+                                description: project.description,
+                                web_url: project.web_url,
+                                path_with_namespace: project.path_with_namespace,
+                                default_branch: project.default_branch,
+                                visibility: project.visibility
+                            };
+                            this.urlParseStep = 'confirm';
+                        }
+                    } catch (error) {
+                        console.error('Failed to parse URL:', error);
+                        alert('解析URL失败: ' + (error.response?.data?.error || error.message));
+                        this.urlParseStep = 'input';
+                    } finally {
+                        this.urlParsing = false;
+                    }
+                },
                 async saveProject() {
+                    this.projectSaving = true;
+                    
                     try {
                         if (this.isEditing) {
+                            // 编辑模式：使用currentProject数据
                             await axios.put(`/api/v1/projects/${this.currentProject.id}`, this.currentProject);
                         } else {
-                            await axios.post('/api/v1/projects', this.currentProject);
+                            // 添加模式：使用解析出的项目信息
+                            const projectData = {
+                                gitlab_project_id: this.parsedProjectInfo.gitlab_project_id,
+                                name: this.parsedProjectInfo.name,
+                                url: this.parsedProjectInfo.web_url,
+                                description: this.parsedProjectInfo.description || '',
+                                access_token: this.saveAccessToken ? this.urlParseForm.access_token : ''
+                            };
+                            
+                            await axios.post('/api/v1/projects', projectData);
                         }
                         
                         const modal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
@@ -299,9 +980,16 @@
                         
                         await this.loadProjects();
                         alert(this.isEditing ? '项目更新成功' : '项目添加成功');
+                        
+                        // 重置状态
+                        if (!this.isEditing) {
+                            this.resetAddProjectState();
+                        }
                     } catch (error) {
                         console.error('Failed to save project:', error);
                         alert('保存项目失败: ' + (error.response?.data?.error || error.message));
+                    } finally {
+                        this.projectSaving = false;
                     }
                 },
                 async deleteProject(projectId) {
@@ -353,6 +1041,7 @@
             },
             mounted() {
                 this.loadProjects();
+                this.loadGitLabConfig();
             }
         }).mount('#app');
     </script>

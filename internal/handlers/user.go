@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -125,7 +126,16 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 }
 
 func (h *Handler) UsersPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "users.html", gin.H{
-		"title": "用户管理",
-	})
+	data := gin.H{
+		"title":       "用户管理",
+		"currentPage": "users",
+	}
+
+	if err := h.renderTemplate(c, "users.html", data); err != nil {
+		logger.GetLogger().Errorf("Failed to render users template: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
+			"error": "Failed to load users page",
+		})
+		return
+	}
 }
