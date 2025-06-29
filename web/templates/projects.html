@@ -935,8 +935,6 @@
                             });
                         }
                         
-                        alert(message);
-                        
                         await this.loadProjects();
                         this.resetAddProjectState();
                     } catch (error) {
@@ -1045,7 +1043,6 @@
                         modal.hide();
                         
                         await this.loadProjects();
-                        alert(this.isEditing ? '项目更新成功' : '项目添加成功');
                         
                         // 重置状态
                         if (!this.isEditing) {
@@ -1066,7 +1063,6 @@
                     try {
                         await axios.delete(`/api/v1/projects/${projectId}`);
                         await this.loadProjects();
-                        alert('项目删除成功');
                     } catch (error) {
                         console.error('Failed to delete project:', error);
                         alert('删除项目失败');
@@ -1108,7 +1104,9 @@
                         const response = await axios.post(`/api/v1/projects/${project.id}/sync-gitlab-webhook`);
                         const result = response.data.data;
                         
-                        alert(`GitLab Webhook同步${result.success ? '成功' : '失败'}: ${result.message}`);
+                        if (!result.success) {
+                            alert(`GitLab Webhook同步失败: ${result.message}`);
+                        }
                         
                         if (result.success) {
                             await this.loadProjects();

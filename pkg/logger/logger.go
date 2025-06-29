@@ -1,7 +1,9 @@
 package logger
 
 import (
+	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/sirupsen/logrus"
 )
@@ -10,7 +12,26 @@ var log *logrus.Logger
 
 func Init(level string) {
 	log = logrus.New()
-	log.SetOutput(os.Stdout)
+	
+	// 确保日志目录存在
+	logDir := "./logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.WithError(err).Warn("Failed to create log directory, using stdout only")
+		log.SetOutput(os.Stdout)
+	} else {
+		// 创建日志文件
+		logFile := filepath.Join(logDir, "app.log")
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.WithError(err).Warn("Failed to open log file, using stdout only")
+			log.SetOutput(os.Stdout)
+		} else {
+			// 同时输出到文件和标准输出
+			multiWriter := io.MultiWriter(os.Stdout, file)
+			log.SetOutput(multiWriter)
+		}
+	}
+	
 	log.SetFormatter(&logrus.JSONFormatter{})
 
 	// 设置日志级别

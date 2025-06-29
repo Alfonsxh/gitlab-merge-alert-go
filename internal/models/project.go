@@ -2,13 +2,11 @@ package models
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type Project struct {
 	ID              uint   `json:"id" gorm:"primarykey"`
-	GitLabProjectID int    `json:"gitlab_project_id" gorm:"uniqueIndex;not null"`
+	GitLabProjectID int    `json:"gitlab_project_id" gorm:"column:gitlab_project_id;uniqueIndex;not null"`
 	Name            string `json:"name" gorm:"not null"`
 	URL             string `json:"url" gorm:"not null"`
 	Description     string `json:"description"`
@@ -20,9 +18,8 @@ type Project struct {
 	AutoManageWebhook bool       `json:"auto_manage_webhook" gorm:"default:true"`  // 是否自动管理webhook
 	LastSyncAt        *time.Time `json:"last_sync_at,omitempty"`                   // 最后同步时间
 
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// 关联关系
 	Webhooks []Webhook `json:"webhooks,omitempty" gorm:"many2many:project_webhooks;"`

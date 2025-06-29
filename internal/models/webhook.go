@@ -2,19 +2,16 @@ package models
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type Webhook struct {
-	ID          uint           `json:"id" gorm:"primarykey"`
-	Name        string         `json:"name" gorm:"not null"`
-	URL         string         `json:"url" gorm:"not null"`
-	Description string         `json:"description"`
-	IsActive    bool           `json:"is_active" gorm:"default:true"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	ID          uint      `json:"id" gorm:"primarykey"`
+	Name        string    `json:"name" gorm:"not null"`
+	URL         string    `json:"url" gorm:"not null"`
+	Description string    `json:"description"`
+	IsActive    bool      `json:"is_active" gorm:"default:true"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 
 	// 关联关系
 	Projects []Project `json:"projects,omitempty" gorm:"many2many:project_webhooks;"`

@@ -1,21 +1,27 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"gitlab-merge-alert-go/internal/models"
 	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func (h *Handler) GetWebhooks(c *gin.Context) {
 	var webhooks []models.Webhook
 	if err := h.db.Preload("Projects").Find(&webhooks).Error; err != nil {
+		logger.GetLogger().Errorf("Failed to fetch webhooks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch webhooks"})
 		return
 	}
+
+	logger.GetLogger().Debugf("Successfully fetched %d webhooks", len(webhooks))
 
 	// 转换为响应格式
 	var responses []models.WebhookResponse
@@ -68,9 +74,17 @@ func (h *Handler) CreateWebhook(c *gin.Context) {
 	}
 
 	if err := h.db.Create(webhook).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create webhook"})
+		logger.GetLogger().Errorf("Failed to create webhook [Name: %s, URL: %s]: %v", req.Name, req.URL, err)
+		
+		if strings.Contains(err.Error(), "UNIQUE") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Webhook名称或URL已存在"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建Webhook失败"})
+		}
 		return
 	}
+
+	logger.GetLogger().Infof("Successfully created webhook [ID: %d, Name: %s]", webhook.ID, webhook.Name)
 
 	response := models.WebhookResponse{
 		ID:          webhook.ID,
@@ -100,7 +114,13 @@ func (h *Handler) UpdateWebhook(c *gin.Context) {
 
 	var webhook models.Webhook
 	if err := h.db.First(&webhook, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Webhook not found"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.GetLogger().Warnf("Webhook not found [ID: %d]", id)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Webhook not found"})
+		} else {
+			logger.GetLogger().Errorf("Failed to fetch webhook [ID: %d]: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		}
 		return
 	}
 
@@ -119,9 +139,17 @@ func (h *Handler) UpdateWebhook(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&webhook).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update webhook"})
+		logger.GetLogger().Errorf("Failed to update webhook [ID: %d]: %v", id, err)
+		
+		if strings.Contains(err.Error(), "UNIQUE") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Webhook名称或URL已存在"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新Webhook失败"})
+		}
 		return
 	}
+
+	logger.GetLogger().Infof("Successfully updated webhook [ID: %d, Name: %s]", webhook.ID, webhook.Name)
 
 	response := models.WebhookResponse{
 		ID:          webhook.ID,
@@ -144,9 +172,12 @@ func (h *Handler) DeleteWebhook(c *gin.Context) {
 	}
 
 	if err := h.db.Delete(&models.Webhook{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete webhook"})
+		logger.GetLogger().Errorf("Failed to delete webhook [ID: %d]: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除Webhook失败"})
 		return
 	}
+
+	logger.GetLogger().Infof("Successfully deleted webhook [ID: %d]", id)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Webhook deleted successfully"})
 }

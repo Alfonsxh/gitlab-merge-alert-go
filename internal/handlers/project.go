@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitlab-merge-alert-go/internal/models"
@@ -78,57 +80,36 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		autoManageWebhook = *req.AutoManageWebhook
 	}
 
-	var project *models.Project
-	var isRestored bool
-
-	// 检查是否存在软删除的记录
+	// 检查项目是否已存在
 	var existingProject models.Project
-	err := h.db.Unscoped().Where("gitlab_project_id = ?", req.GitLabProjectID).First(&existingProject).Error
+	err := h.db.Where(&models.Project{GitLabProjectID: req.GitLabProjectID}).First(&existingProject).Error
 	if err == nil {
-		if existingProject.DeletedAt.Valid {
-			// 恢复软删除的记录
-			existingProject.DeletedAt = gorm.DeletedAt{}
-			existingProject.Name = req.Name
-			existingProject.URL = req.URL
-			existingProject.Description = req.Description
-			existingProject.AccessToken = req.AccessToken
-			existingProject.AutoManageWebhook = autoManageWebhook
-			existingProject.WebhookSynced = false
-			existingProject.GitLabWebhookID = nil
-			existingProject.LastSyncAt = nil
-
-			if err := h.db.Save(&existingProject).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to restore project"})
-				return
-			}
-
-			project = &existingProject
-			isRestored = true
-		} else {
-			// 记录已存在且未删除
-			c.JSON(http.StatusConflict, gin.H{"error": "Project already exists"})
-			return
-		}
-	} else if err != gorm.ErrRecordNotFound {
-		// 数据库查询错误
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database query failed"})
+		// 项目已存在
+		logger.GetLogger().Warnf("Project with GitLab ID %d already exists", req.GitLabProjectID)
+		c.JSON(http.StatusConflict, gin.H{"error": "Project already exists"})
 		return
-	} else {
-		// 创建新记录
-		project = &models.Project{
-			GitLabProjectID:   req.GitLabProjectID,
-			Name:              req.Name,
-			URL:               req.URL,
-			Description:       req.Description,
-			AccessToken:       req.AccessToken,
-			AutoManageWebhook: autoManageWebhook,
-			WebhookSynced:     false,
-		}
+	} else if err != gorm.ErrRecordNotFound {
+		// 其他数据库错误
+		logger.GetLogger().Errorf("Failed to check existing project: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
 
-		if err := h.db.Create(project).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
-			return
-		}
+	// 创建新项目
+	project := &models.Project{
+		GitLabProjectID:   req.GitLabProjectID,
+		Name:              req.Name,
+		URL:               req.URL,
+		Description:       req.Description,
+		AccessToken:       req.AccessToken,
+		AutoManageWebhook: autoManageWebhook,
+		WebhookSynced:     false,
+	}
+
+	if err := h.db.Create(project).Error; err != nil {
+		logger.GetLogger().Errorf("Failed to create project: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
+		return
 	}
 
 	// 如果启用了自动管理webhook，尝试创建GitLab webhook
@@ -137,9 +118,6 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	}
 
 	message := "Project created successfully"
-	if isRestored {
-		message = "Project restored successfully"
-	}
 
 	response := models.ProjectResponse{
 		ID:                project.ID,
@@ -195,9 +173,17 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&project).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update project"})
+		logger.GetLogger().Errorf("Failed to update project [ID: %d]: %v", id, err)
+		
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: projects.gitlab_project_id") {
+			c.JSON(http.StatusConflict, gin.H{"error": "GitLab项目ID已存在"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新项目失败"})
+		}
 		return
 	}
+
+	logger.GetLogger().Infof("Successfully updated project [ID: %d, Name: %s]", project.ID, project.Name)
 
 	response := models.ProjectResponse{
 		ID:                project.ID,
@@ -236,9 +222,12 @@ func (h *Handler) DeleteProject(c *gin.Context) {
 	}
 
 	if err := h.db.Delete(&models.Project{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete project"})
+		logger.GetLogger().Errorf("Failed to delete project [ID: %d]: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除项目失败"})
 		return
 	}
+
+	logger.GetLogger().Infof("Successfully deleted project [ID: %d]", id)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Project deleted successfully"})
 }
@@ -445,48 +434,14 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 
 		// 检查项目是否已存在
 		var existingProject models.Project
-		err := tx.Unscoped().Where("gitlab_project_id = ?", projectInfo.GitLabProjectID).First(&existingProject).Error
+		err := tx.Where(&models.Project{GitLabProjectID: projectInfo.GitLabProjectID}).First(&existingProject).Error
 		if err == nil {
-			if existingProject.DeletedAt.Valid {
-				// 恢复软删除的记录
-				existingProject.DeletedAt = gorm.DeletedAt{}
-				existingProject.Name = projectInfo.Name
-				existingProject.URL = projectInfo.URL
-				existingProject.Description = projectInfo.Description
-				existingProject.AccessToken = req.AccessToken
-				existingProject.AutoManageWebhook = true // 批量创建时默认启用
-				existingProject.WebhookSynced = false
-				existingProject.GitLabWebhookID = nil
-				existingProject.LastSyncAt = nil
-
-				if err := tx.Save(&existingProject).Error; err != nil {
-					result.Success = false
-					result.Error = "恢复项目失败: " + err.Error()
-					results = append(results, result)
-					failureCount++
-					continue
-				}
-
-				result.Success = true
-				result.ProjectID = existingProject.ID
-				// 项目已恢复，Error字段保持空值表示成功
-				results = append(results, result)
-				successCount++
-				projectToAssociate = &existingProject
-
-				// 在事务提交后异步创建GitLab webhook
-				defer func(p *models.Project) {
-					go h.autoCreateGitLabWebhook(p)
-				}(&existingProject)
-
-			} else {
-				// 记录已存在且未删除
-				result.Success = false
-				result.Error = "项目已存在"
-				results = append(results, result)
-				failureCount++
-				continue
-			}
+			// 项目已存在
+			result.Success = false
+			result.Error = "项目已存在"
+			results = append(results, result)
+			failureCount++
+			continue
 		} else if err != gorm.ErrRecordNotFound {
 			// 数据库查询错误
 			result.Success = false
@@ -494,61 +449,80 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 			results = append(results, result)
 			failureCount++
 			continue
-		} else {
-			// 创建新项目
-			project := &models.Project{
-				GitLabProjectID:   projectInfo.GitLabProjectID,
-				Name:              projectInfo.Name,
-				URL:               projectInfo.URL,
-				Description:       projectInfo.Description,
-				AccessToken:       req.AccessToken,
-				AutoManageWebhook: true, // 批量创建时默认启用自动管理
-				WebhookSynced:     false,
-			}
-
-			if err := tx.Create(project).Error; err != nil {
-				result.Success = false
-				result.Error = "创建项目失败: " + err.Error()
-				results = append(results, result)
-				failureCount++
-				continue
-			}
-
-			result.Success = true
-			result.ProjectID = project.ID
-			results = append(results, result)
-			successCount++
-			projectToAssociate = project
-
-			// 在事务提交后异步创建GitLab webhook
-			defer func(p *models.Project) {
-				go h.autoCreateGitLabWebhook(p)
-			}(project)
 		}
+
+		// 创建新项目
+		project := &models.Project{
+			GitLabProjectID:   projectInfo.GitLabProjectID,
+			Name:              projectInfo.Name,
+			URL:               projectInfo.URL,
+			Description:       projectInfo.Description,
+			AccessToken:       req.AccessToken,
+			AutoManageWebhook: true, // 批量创建时默认启用自动管理
+			WebhookSynced:     false,
+		}
+
+		if err := tx.Create(project).Error; err != nil {
+			result.Success = false
+			result.Error = "创建项目失败: " + err.Error()
+			results = append(results, result)
+			failureCount++
+			continue
+		}
+
+		result.Success = true
+		result.ProjectID = project.ID
+		results = append(results, result)
+		successCount++
+		projectToAssociate = project
+
+		// 在事务提交后异步创建GitLab webhook
+		defer func(p *models.Project) {
+			go h.autoCreateGitLabWebhook(p)
+		}(project)
 
 		// 关联webhook
 		if projectToAssociate != nil {
 			if req.WebhookConfig.UseUnified && webhookID > 0 {
-				// 使用统一webhook
-				projectWebhook := &models.ProjectWebhook{
-					ProjectID: projectToAssociate.ID,
-					WebhookID: webhookID,
+				// 使用统一webhook - 检查是否已存在关联
+				var existingAssociation models.ProjectWebhook
+				err := tx.Where("project_id = ? AND webhook_id = ?", projectToAssociate.ID, webhookID).First(&existingAssociation).Error
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					// 不存在关联，创建新的
+					projectWebhook := &models.ProjectWebhook{
+						ProjectID: projectToAssociate.ID,
+						WebhookID: webhookID,
+					}
+					if err := tx.Create(projectWebhook).Error; err != nil {
+						// webhook关联失败不影响项目创建，记录错误即可
+						result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
+					}
+				} else if err != nil {
+					// 数据库查询错误
+					result.Error = "项目创建成功，但检查webhook关联失败: " + err.Error()
 				}
-				if err := tx.Create(projectWebhook).Error; err != nil {
-					// webhook关联失败不影响项目创建，记录错误即可
-					result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
-				}
+				// 如果关联已存在，则不需要任何操作
 			} else if !req.WebhookConfig.UseUnified {
 				// 使用单独配置的webhook
 				for _, mapping := range req.WebhookConfig.ProjectWebhooks {
 					if mapping.GitLabProjectID == projectInfo.GitLabProjectID {
-						projectWebhook := &models.ProjectWebhook{
-							ProjectID: projectToAssociate.ID,
-							WebhookID: mapping.WebhookID,
+						// 检查是否已存在关联
+						var existingAssociation models.ProjectWebhook
+						err := tx.Where("project_id = ? AND webhook_id = ?", projectToAssociate.ID, mapping.WebhookID).First(&existingAssociation).Error
+						if errors.Is(err, gorm.ErrRecordNotFound) {
+							// 不存在关联，创建新的
+							projectWebhook := &models.ProjectWebhook{
+								ProjectID: projectToAssociate.ID,
+								WebhookID: mapping.WebhookID,
+							}
+							if err := tx.Create(projectWebhook).Error; err != nil {
+								result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
+							}
+						} else if err != nil {
+							// 数据库查询错误
+							result.Error = "项目创建成功，但检查webhook关联失败: " + err.Error()
 						}
-						if err := tx.Create(projectWebhook).Error; err != nil {
-							result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
-						}
+						// 如果关联已存在，则不需要任何操作
 						break
 					}
 				}

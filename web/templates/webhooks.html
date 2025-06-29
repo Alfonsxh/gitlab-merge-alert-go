@@ -278,7 +278,6 @@
                         modal.hide();
                         
                         await this.loadWebhooks();
-                        alert(this.isEditing ? 'Webhook更新成功' : 'Webhook添加成功');
                     } catch (error) {
                         console.error('Failed to save webhook:', error);
                         alert('保存Webhook失败: ' + (error.response?.data?.error || error.message));
@@ -292,7 +291,6 @@
                     try {
                         await axios.delete(`/api/v1/webhooks/${webhookId}`);
                         await this.loadWebhooks();
-                        alert('Webhook删除成功');
                     } catch (error) {
                         console.error('Failed to delete webhook:', error);
                         alert('删除Webhook失败');

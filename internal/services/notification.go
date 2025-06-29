@@ -29,7 +29,7 @@ func (s *NotificationService) ProcessMergeRequest(webhookData *models.GitLabWebh
 
 	// 查找项目
 	var project models.Project
-	if err := s.db.Where("gitlab_project_id = ?", webhookData.Project.ID).First(&project).Error; err != nil {
+	if err := s.db.Where(&models.Project{GitLabProjectID: webhookData.Project.ID}).First(&project).Error; err != nil {
 		return fmt.Errorf("project not found: %v", err)
 	}
 
@@ -100,15 +100,24 @@ func (s *NotificationService) sendNotifications(project *models.Project, webhook
 		assigneeEmails,
 	)
 
-	// 发送到所有关联的webhook
+	// 发送到所有关联的webhook，使用去重逻辑防止重复发送
+	sentWebhooks := make(map[uint]bool) // 记录已发送的webhook ID
 	for _, webhook := range project.Webhooks {
 		if !webhook.IsActive {
+			continue
+		}
+
+		// 检查是否已经发送过这个webhook
+		if sentWebhooks[webhook.ID] {
 			continue
 		}
 
 		if err := s.wechatService.SendMessage(webhook.URL, content, mentionedMobiles); err != nil {
 			return fmt.Errorf("failed to send to webhook %s: %v", webhook.Name, err)
 		}
+
+		// 标记这个webhook已发送
+		sentWebhooks[webhook.ID] = true
 	}
 
 	return nil

@@ -2,18 +2,15 @@ package models
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type User struct {
-	ID        uint           `json:"id" gorm:"primarykey"`
-	Email     string         `json:"email" gorm:"uniqueIndex;not null"`
-	Phone     string         `json:"phone" gorm:"not null"`
-	Name      string         `json:"name"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	ID        uint      `json:"id" gorm:"primarykey"`
+	Email     string    `json:"email" gorm:"uniqueIndex;not null"`
+	Phone     string    `json:"phone" gorm:"not null"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type CreateUserRequest struct {

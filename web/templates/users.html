@@ -216,7 +216,6 @@
                         modal.hide();
                         
                         await this.loadUsers();
-                        alert(this.isEditing ? '用户更新成功' : '用户添加成功');
                     } catch (error) {
                         console.error('Failed to save user:', error);
                         alert('保存用户失败: ' + (error.response?.data?.error || error.message));
@@ -230,7 +229,6 @@
                     try {
                         await axios.delete(`/api/v1/users/${userId}`);
                         await this.loadUsers();
-                        alert('用户删除成功');
                     } catch (error) {
                         console.error('Failed to delete user:', error);
                         alert('删除用户失败');

@@ -2,8 +2,6 @@ module gitlab-merge-alert-go
 
 go 1.23.0
 
-toolchain go1.24.2
-
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/sirupsen/logrus v1.9.3
