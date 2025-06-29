@@ -42,6 +42,16 @@
         .navbar-nav .nav-link.active {
             color: rgba(0,0,0,.9);
         }
+        
+        /* 旋转动画 */
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -101,6 +111,7 @@
                             <th>项目名称</th>
                             <th>GitLab项目ID</th>
                             <th>描述</th>
+                            <th>GitLab Webhook</th>
                             <th>关联Webhook</th>
                             <th>创建时间</th>
                             <th>操作</th>
@@ -117,6 +128,22 @@
                             </td>
                             <td v-text="project.gitlab_project_id">-</td>
                             <td v-text="project.description || '-'">-</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span v-if="project.webhook_synced" class="badge bg-success me-2">
+                                        <i class="bi bi-check-circle me-1"></i>已同步
+                                    </span>
+                                    <span v-else class="badge bg-warning me-2">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>未同步
+                                    </span>
+                                    <button v-if="project.auto_manage_webhook" 
+                                            class="btn btn-sm btn-outline-primary" 
+                                            @click="syncGitLabWebhook(project)"
+                                            :disabled="syncingWebhook === project.id">
+                                        <i class="bi bi-arrow-repeat" :class="{'spin': syncingWebhook === project.id}"></i>
+                                    </button>
+                                </div>
+                            </td>
                             <td>
                                 <span v-for="webhook in project.webhooks" :key="webhook.id" class="badge bg-secondary me-1" v-text="webhook.name">-</span>
                                 <span v-if="!project.webhooks || project.webhooks.length === 0" class="text-muted">无</span>
@@ -135,7 +162,7 @@
                             </td>
                         </tr>
                         <tr v-if="projects.length === 0">
-                            <td colspan="7" class="text-center py-4">
+                            <td colspan="8" class="text-center py-4">
                                 <div class="text-muted">
                                     <i class="bi bi-folder-x fs-1 mb-3 d-block"></i>
                                     <p class="mb-2">还没有添加任何项目</p>
@@ -671,6 +698,7 @@
                     urlParsing: false,
                     connectionTesting: false,
                     projectSaving: false,
+                    syncingWebhook: null, // 当前正在同步webhook的项目ID
                     connectionTestResult: null,
                     gitlabConfig: null
                 }
@@ -1071,6 +1099,25 @@
                     } catch (error) {
                         console.error('Failed to toggle webhook:', error);
                         alert('操作失败');
+                    }
+                },
+                async syncGitLabWebhook(project) {
+                    this.syncingWebhook = project.id;
+                    
+                    try {
+                        const response = await axios.post(`/api/v1/projects/${project.id}/sync-gitlab-webhook`);
+                        const result = response.data.data;
+                        
+                        alert(`GitLab Webhook同步${result.success ? '成功' : '失败'}: ${result.message}`);
+                        
+                        if (result.success) {
+                            await this.loadProjects();
+                        }
+                    } catch (error) {
+                        console.error('Failed to sync GitLab webhook:', error);
+                        alert('同步GitLab Webhook失败: ' + (error.response?.data?.error || error.message));
+                    } finally {
+                        this.syncingWebhook = null;
                     }
                 },
                 formatDate(dateString) {

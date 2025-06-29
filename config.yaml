@@ -5,4 +5,5 @@ log_level: info
 database_path: ./data/gitlab-merge-alert.db
 gitlab_url: https://your-gitlab-server.com
 redirect_server_url: http://localhost:1688
+public_webhook_url: http://localhost:1688
 default_webhook_url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-WEBHOOK-KEY

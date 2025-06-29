@@ -92,6 +92,11 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			projects.POST("/parse-url", h.ParseProjectURL)
 			projects.POST("/scan-group", h.ScanGroupProjects)
 			projects.POST("/batch-create", h.BatchCreateProjects)
+
+			// GitLab Webhook管理API
+			projects.POST("/:id/sync-gitlab-webhook", h.SyncGitLabWebhook)
+			projects.DELETE("/:id/sync-gitlab-webhook", h.DeleteGitLabWebhook)
+			projects.GET("/:id/gitlab-webhook-status", h.GetGitLabWebhookStatus)
 		}
 
 		// GitLab相关API

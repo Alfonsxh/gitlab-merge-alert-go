@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -49,6 +50,47 @@ type GitLabGroupInfo struct {
 	Path     string `json:"path"`
 	FullPath string `json:"full_path"`
 	WebURL   string `json:"web_url"`
+}
+
+// GitLabWebhook GitLab项目Webhook结构
+type GitLabWebhook struct {
+	ID                       int    `json:"id"`
+	URL                      string `json:"url"`
+	MergeRequestsEvents      bool   `json:"merge_requests_events"`
+	PushEvents               bool   `json:"push_events"`
+	IssuesEvents             bool   `json:"issues_events"`
+	ConfidentialIssuesEvents bool   `json:"confidential_issues_events"`
+	TagPushEvents            bool   `json:"tag_push_events"`
+	NoteEvents               bool   `json:"note_events"`
+	PipelineEvents           bool   `json:"pipeline_events"`
+	WikiPageEvents           bool   `json:"wiki_page_events"`
+	DeploymentEvents         bool   `json:"deployment_events"`
+	JobEvents                bool   `json:"job_events"`
+	ReleasesEvents           bool   `json:"releases_events"`
+	SubgroupEvents           bool   `json:"subgroup_events"`
+	EnableSSLVerification    bool   `json:"enable_ssl_verification"`
+	Token                    string `json:"token,omitempty"`
+	CreatedAt                string `json:"created_at"`
+	UpdatedAt                string `json:"updated_at"`
+}
+
+// CreateWebhookRequest 创建Webhook请求结构
+type CreateWebhookRequest struct {
+	URL                      string `json:"url"`
+	MergeRequestsEvents      bool   `json:"merge_requests_events"`
+	PushEvents               bool   `json:"push_events"`
+	IssuesEvents             bool   `json:"issues_events"`
+	ConfidentialIssuesEvents bool   `json:"confidential_issues_events"`
+	TagPushEvents            bool   `json:"tag_push_events"`
+	NoteEvents               bool   `json:"note_events"`
+	PipelineEvents           bool   `json:"pipeline_events"`
+	WikiPageEvents           bool   `json:"wiki_page_events"`
+	DeploymentEvents         bool   `json:"deployment_events"`
+	JobEvents                bool   `json:"job_events"`
+	ReleasesEvents           bool   `json:"releases_events"`
+	SubgroupEvents           bool   `json:"subgroup_events"`
+	EnableSSLVerification    bool   `json:"enable_ssl_verification"`
+	Token                    string `json:"token,omitempty"`
 }
 
 // ParseGitLabURL 解析GitLab项目URL，提取基础URL和项目路径
@@ -452,4 +494,182 @@ func (s *GitLabService) ValidateProjectURL(projectURL string) (int, error) {
 	}
 
 	return project.ID, nil
+}
+
+// CreateProjectWebhook 在GitLab项目中创建webhook
+func (s *GitLabService) CreateProjectWebhook(baseURL string, projectID int, webhookURL, accessToken string) (*GitLabWebhook, error) {
+	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/hooks", baseURL, projectID)
+
+	webhookRequest := CreateWebhookRequest{
+		URL:                   webhookURL,
+		MergeRequestsEvents:   true, // 只关注合并请求事件
+		PushEvents:            false,
+		IssuesEvents:          false,
+		EnableSSLVerification: false, // 对于测试环境可以关闭SSL验证
+	}
+
+	requestBody, err := json.Marshal(webhookRequest)
+	if err != nil {
+		return nil, fmt.Errorf("序列化请求数据失败: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
+	if accessToken != "" {
+		if strings.HasPrefix(accessToken, "glpat-") || strings.HasPrefix(accessToken, "glcbt-") {
+			req.Header.Set("Authorization", "Bearer "+accessToken)
+		} else {
+			req.Header.Set("PRIVATE-TOKEN", accessToken)
+		}
+	}
+	req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 处理不同的HTTP状态码
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		// 成功创建，继续处理
+	case http.StatusUnauthorized:
+		return nil, fmt.Errorf("访问令牌无效或已过期")
+	case http.StatusForbidden:
+		return nil, fmt.Errorf("没有权限在此项目中创建webhook")
+	case http.StatusNotFound:
+		return nil, fmt.Errorf("项目不存在或无权限访问")
+	case http.StatusUnprocessableEntity:
+		return nil, fmt.Errorf("Webhook URL已存在或格式无效")
+	default:
+		return nil, fmt.Errorf("GitLab API返回错误状态: %d", resp.StatusCode)
+	}
+
+	var webhook GitLabWebhook
+	if err := json.NewDecoder(resp.Body).Decode(&webhook); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %v", err)
+	}
+
+	return &webhook, nil
+}
+
+// ListProjectWebhooks 获取项目的所有webhooks
+func (s *GitLabService) ListProjectWebhooks(baseURL string, projectID int, accessToken string) ([]*GitLabWebhook, error) {
+	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/hooks", baseURL, projectID)
+
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	// 设置认证头
+	if accessToken != "" {
+		if strings.HasPrefix(accessToken, "glpat-") || strings.HasPrefix(accessToken, "glcbt-") {
+			req.Header.Set("Authorization", "Bearer "+accessToken)
+		} else {
+			req.Header.Set("PRIVATE-TOKEN", accessToken)
+		}
+	}
+	req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 处理不同的HTTP状态码
+	switch resp.StatusCode {
+	case http.StatusOK:
+		// 成功，继续处理
+	case http.StatusUnauthorized:
+		return nil, fmt.Errorf("访问令牌无效或已过期")
+	case http.StatusForbidden:
+		return nil, fmt.Errorf("没有权限访问此项目的webhooks")
+	case http.StatusNotFound:
+		return nil, fmt.Errorf("项目不存在或无权限访问")
+	default:
+		return nil, fmt.Errorf("GitLab API返回错误状态: %d", resp.StatusCode)
+	}
+
+	var webhooks []GitLabWebhook
+	if err := json.NewDecoder(resp.Body).Decode(&webhooks); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %v", err)
+	}
+
+	// 转换为指针数组
+	var result []*GitLabWebhook
+	for i := range webhooks {
+		result = append(result, &webhooks[i])
+	}
+
+	return result, nil
+}
+
+// DeleteProjectWebhook 删除项目webhook
+func (s *GitLabService) DeleteProjectWebhook(baseURL string, projectID, webhookID int, accessToken string) error {
+	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/hooks/%d", baseURL, projectID, webhookID)
+
+	req, err := http.NewRequest("DELETE", apiURL, nil)
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	// 设置认证头
+	if accessToken != "" {
+		if strings.HasPrefix(accessToken, "glpat-") || strings.HasPrefix(accessToken, "glcbt-") {
+			req.Header.Set("Authorization", "Bearer "+accessToken)
+		} else {
+			req.Header.Set("PRIVATE-TOKEN", accessToken)
+		}
+	}
+	req.Header.Set("User-Agent", "GitLab-Merge-Alert/1.0")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 处理不同的HTTP状态码
+	switch resp.StatusCode {
+	case http.StatusNoContent:
+		// 成功删除
+		return nil
+	case http.StatusUnauthorized:
+		return fmt.Errorf("访问令牌无效或已过期")
+	case http.StatusForbidden:
+		return fmt.Errorf("没有权限删除此项目的webhook")
+	case http.StatusNotFound:
+		return fmt.Errorf("项目或webhook不存在")
+	default:
+		return fmt.Errorf("GitLab API返回错误状态: %d", resp.StatusCode)
+	}
+}
+
+// BuildWebhookURL 构建本服务的webhook接收URL
+func (s *GitLabService) BuildWebhookURL(publicBaseURL string) string {
+	return fmt.Sprintf("%s/api/v1/webhook/gitlab", strings.TrimSuffix(publicBaseURL, "/"))
+}
+
+// FindWebhookByURL 根据URL查找项目中的webhook
+func (s *GitLabService) FindWebhookByURL(baseURL string, projectID int, webhookURL, accessToken string) (*GitLabWebhook, error) {
+	webhooks, err := s.ListProjectWebhooks(baseURL, projectID, accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, webhook := range webhooks {
+		if webhook.URL == webhookURL {
+			return webhook, nil
+		}
+	}
+
+	return nil, nil // 未找到
 }

@@ -3,11 +3,14 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/internal/services"
 	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func (h *Handler) GetProjects(c *gin.Context) {
@@ -21,13 +24,17 @@ func (h *Handler) GetProjects(c *gin.Context) {
 	var responses []models.ProjectResponse
 	for _, project := range projects {
 		response := models.ProjectResponse{
-			ID:              project.ID,
-			GitLabProjectID: project.GitLabProjectID,
-			Name:            project.Name,
-			URL:             project.URL,
-			Description:     project.Description,
-			CreatedAt:       project.CreatedAt,
-			UpdatedAt:       project.UpdatedAt,
+			ID:                project.ID,
+			GitLabProjectID:   project.GitLabProjectID,
+			Name:              project.Name,
+			URL:               project.URL,
+			Description:       project.Description,
+			GitLabWebhookID:   project.GitLabWebhookID,
+			WebhookSynced:     project.WebhookSynced,
+			AutoManageWebhook: project.AutoManageWebhook,
+			LastSyncAt:        project.LastSyncAt,
+			CreatedAt:         project.CreatedAt,
+			UpdatedAt:         project.UpdatedAt,
 		}
 
 		// 转换关联的webhooks
@@ -65,30 +72,90 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		}
 	}
 
-	project := &models.Project{
-		GitLabProjectID: req.GitLabProjectID,
-		Name:            req.Name,
-		URL:             req.URL,
-		Description:     req.Description,
-		AccessToken:     req.AccessToken,
+	// 设置默认值
+	autoManageWebhook := true
+	if req.AutoManageWebhook != nil {
+		autoManageWebhook = *req.AutoManageWebhook
 	}
 
-	if err := h.db.Create(project).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
+	var project *models.Project
+	var isRestored bool
+
+	// 检查是否存在软删除的记录
+	var existingProject models.Project
+	err := h.db.Unscoped().Where("gitlab_project_id = ?", req.GitLabProjectID).First(&existingProject).Error
+	if err == nil {
+		if existingProject.DeletedAt.Valid {
+			// 恢复软删除的记录
+			existingProject.DeletedAt = gorm.DeletedAt{}
+			existingProject.Name = req.Name
+			existingProject.URL = req.URL
+			existingProject.Description = req.Description
+			existingProject.AccessToken = req.AccessToken
+			existingProject.AutoManageWebhook = autoManageWebhook
+			existingProject.WebhookSynced = false
+			existingProject.GitLabWebhookID = nil
+			existingProject.LastSyncAt = nil
+
+			if err := h.db.Save(&existingProject).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to restore project"})
+				return
+			}
+
+			project = &existingProject
+			isRestored = true
+		} else {
+			// 记录已存在且未删除
+			c.JSON(http.StatusConflict, gin.H{"error": "Project already exists"})
+			return
+		}
+	} else if err != gorm.ErrRecordNotFound {
+		// 数据库查询错误
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database query failed"})
 		return
+	} else {
+		// 创建新记录
+		project = &models.Project{
+			GitLabProjectID:   req.GitLabProjectID,
+			Name:              req.Name,
+			URL:               req.URL,
+			Description:       req.Description,
+			AccessToken:       req.AccessToken,
+			AutoManageWebhook: autoManageWebhook,
+			WebhookSynced:     false,
+		}
+
+		if err := h.db.Create(project).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
+			return
+		}
+	}
+
+	// 如果启用了自动管理webhook，尝试创建GitLab webhook
+	if project.AutoManageWebhook && project.AccessToken != "" {
+		h.autoCreateGitLabWebhook(project)
+	}
+
+	message := "Project created successfully"
+	if isRestored {
+		message = "Project restored successfully"
 	}
 
 	response := models.ProjectResponse{
-		ID:              project.ID,
-		GitLabProjectID: project.GitLabProjectID,
-		Name:            project.Name,
-		URL:             project.URL,
-		Description:     project.Description,
-		CreatedAt:       project.CreatedAt,
-		UpdatedAt:       project.UpdatedAt,
+		ID:                project.ID,
+		GitLabProjectID:   project.GitLabProjectID,
+		Name:              project.Name,
+		URL:               project.URL,
+		Description:       project.Description,
+		GitLabWebhookID:   project.GitLabWebhookID,
+		WebhookSynced:     project.WebhookSynced,
+		AutoManageWebhook: project.AutoManageWebhook,
+		LastSyncAt:        project.LastSyncAt,
+		CreatedAt:         project.CreatedAt,
+		UpdatedAt:         project.UpdatedAt,
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": response})
+	c.JSON(http.StatusCreated, gin.H{"data": response, "message": message})
 }
 
 func (h *Handler) UpdateProject(c *gin.Context) {
@@ -123,6 +190,9 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	if req.AccessToken != "" {
 		project.AccessToken = req.AccessToken
 	}
+	if req.AutoManageWebhook != nil {
+		project.AutoManageWebhook = *req.AutoManageWebhook
+	}
 
 	if err := h.db.Save(&project).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update project"})
@@ -130,13 +200,17 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	}
 
 	response := models.ProjectResponse{
-		ID:              project.ID,
-		GitLabProjectID: project.GitLabProjectID,
-		Name:            project.Name,
-		URL:             project.URL,
-		Description:     project.Description,
-		CreatedAt:       project.CreatedAt,
-		UpdatedAt:       project.UpdatedAt,
+		ID:                project.ID,
+		GitLabProjectID:   project.GitLabProjectID,
+		Name:              project.Name,
+		URL:               project.URL,
+		Description:       project.Description,
+		GitLabWebhookID:   project.GitLabWebhookID,
+		WebhookSynced:     project.WebhookSynced,
+		AutoManageWebhook: project.AutoManageWebhook,
+		LastSyncAt:        project.LastSyncAt,
+		CreatedAt:         project.CreatedAt,
+		UpdatedAt:         project.UpdatedAt,
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
@@ -147,6 +221,18 @@ func (h *Handler) DeleteProject(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
 		return
+	}
+
+	// 获取项目信息用于清理webhook
+	var project models.Project
+	if err := h.db.First(&project, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		return
+	}
+
+	// 如果有GitLab webhook，尝试删除
+	if project.GitLabWebhookID != nil && project.AccessToken != "" {
+		h.autoDeleteGitLabWebhook(&project)
 	}
 
 	if err := h.db.Delete(&models.Project{}, id).Error; err != nil {
@@ -355,61 +441,116 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 			Name:            projectInfo.Name,
 		}
 
+		var projectToAssociate *models.Project
+
 		// 检查项目是否已存在
 		var existingProject models.Project
-		if err := tx.Where("gitlab_project_id = ?", projectInfo.GitLabProjectID).First(&existingProject).Error; err == nil {
+		err := tx.Unscoped().Where("gitlab_project_id = ?", projectInfo.GitLabProjectID).First(&existingProject).Error
+		if err == nil {
+			if existingProject.DeletedAt.Valid {
+				// 恢复软删除的记录
+				existingProject.DeletedAt = gorm.DeletedAt{}
+				existingProject.Name = projectInfo.Name
+				existingProject.URL = projectInfo.URL
+				existingProject.Description = projectInfo.Description
+				existingProject.AccessToken = req.AccessToken
+				existingProject.AutoManageWebhook = true // 批量创建时默认启用
+				existingProject.WebhookSynced = false
+				existingProject.GitLabWebhookID = nil
+				existingProject.LastSyncAt = nil
+
+				if err := tx.Save(&existingProject).Error; err != nil {
+					result.Success = false
+					result.Error = "恢复项目失败: " + err.Error()
+					results = append(results, result)
+					failureCount++
+					continue
+				}
+
+				result.Success = true
+				result.ProjectID = existingProject.ID
+				// 项目已恢复，Error字段保持空值表示成功
+				results = append(results, result)
+				successCount++
+				projectToAssociate = &existingProject
+
+				// 在事务提交后异步创建GitLab webhook
+				defer func(p *models.Project) {
+					go h.autoCreateGitLabWebhook(p)
+				}(&existingProject)
+
+			} else {
+				// 记录已存在且未删除
+				result.Success = false
+				result.Error = "项目已存在"
+				results = append(results, result)
+				failureCount++
+				continue
+			}
+		} else if err != gorm.ErrRecordNotFound {
+			// 数据库查询错误
 			result.Success = false
-			result.Error = "项目已存在"
+			result.Error = "数据库查询失败: " + err.Error()
 			results = append(results, result)
 			failureCount++
 			continue
-		}
+		} else {
+			// 创建新项目
+			project := &models.Project{
+				GitLabProjectID:   projectInfo.GitLabProjectID,
+				Name:              projectInfo.Name,
+				URL:               projectInfo.URL,
+				Description:       projectInfo.Description,
+				AccessToken:       req.AccessToken,
+				AutoManageWebhook: true, // 批量创建时默认启用自动管理
+				WebhookSynced:     false,
+			}
 
-		// 创建项目
-		project := &models.Project{
-			GitLabProjectID: projectInfo.GitLabProjectID,
-			Name:            projectInfo.Name,
-			URL:             projectInfo.URL,
-			Description:     projectInfo.Description,
-			AccessToken:     req.AccessToken,
-		}
+			if err := tx.Create(project).Error; err != nil {
+				result.Success = false
+				result.Error = "创建项目失败: " + err.Error()
+				results = append(results, result)
+				failureCount++
+				continue
+			}
 
-		if err := tx.Create(project).Error; err != nil {
-			result.Success = false
-			result.Error = "创建项目失败: " + err.Error()
+			result.Success = true
+			result.ProjectID = project.ID
 			results = append(results, result)
-			failureCount++
-			continue
-		}
+			successCount++
+			projectToAssociate = project
 
-		result.Success = true
-		result.ProjectID = project.ID
-		results = append(results, result)
-		successCount++
+			// 在事务提交后异步创建GitLab webhook
+			defer func(p *models.Project) {
+				go h.autoCreateGitLabWebhook(p)
+			}(project)
+		}
 
 		// 关联webhook
-		if req.WebhookConfig.UseUnified && webhookID > 0 {
-			// 使用统一webhook
-			projectWebhook := &models.ProjectWebhook{
-				ProjectID: project.ID,
-				WebhookID: webhookID,
-			}
-			if err := tx.Create(projectWebhook).Error; err != nil {
-				// webhook关联失败不影响项目创建，记录错误即可
-				result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
-			}
-		} else if !req.WebhookConfig.UseUnified {
-			// 使用单独配置的webhook
-			for _, mapping := range req.WebhookConfig.ProjectWebhooks {
-				if mapping.GitLabProjectID == projectInfo.GitLabProjectID {
-					projectWebhook := &models.ProjectWebhook{
-						ProjectID: project.ID,
-						WebhookID: mapping.WebhookID,
+		if projectToAssociate != nil {
+			if req.WebhookConfig.UseUnified && webhookID > 0 {
+				// 使用统一webhook
+				projectWebhook := &models.ProjectWebhook{
+					ProjectID: projectToAssociate.ID,
+					WebhookID: webhookID,
+				}
+				if err := tx.Create(projectWebhook).Error; err != nil {
+					// webhook关联失败不影响项目创建，记录错误即可
+					result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
+				}
+			} else if !req.WebhookConfig.UseUnified {
+				// 使用单独配置的webhook
+				for _, mapping := range req.WebhookConfig.ProjectWebhooks {
+					if mapping.GitLabProjectID == projectInfo.GitLabProjectID {
+						projectWebhook := &models.ProjectWebhook{
+							ProjectID: projectToAssociate.ID,
+							WebhookID: mapping.WebhookID,
+						}
+						if err := tx.Create(projectWebhook).Error; err != nil {
+							result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
+						}
+						break
 					}
-					if err := tx.Create(projectWebhook).Error; err != nil {
-						result.Error = "项目创建成功，但webhook关联失败: " + err.Error()
-					}
-					break
 				}
 			}
 		}
@@ -440,5 +581,243 @@ func (h *Handler) ProjectsPage(c *gin.Context) {
 		logger.GetLogger().Errorf("Failed to render projects template: %v", err)
 		h.renderErrorPage(c, "项目管理页面加载失败")
 		return
+	}
+}
+
+// SyncGitLabWebhook 同步GitLab Webhook
+func (h *Handler) SyncGitLabWebhook(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
+		return
+	}
+
+	var project models.Project
+	if err := h.db.First(&project, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		return
+	}
+
+	// 检查是否启用自动管理webhook
+	if !project.AutoManageWebhook {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "项目未启用自动webhook管理"})
+		return
+	}
+
+	// 解析GitLab URL以获取基础URL
+	parsed := h.gitlabService.ParseGitLabURL(project.URL)
+	if !parsed.IsValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "项目URL格式无效: " + parsed.Error})
+		return
+	}
+
+	// 构建webhook URL
+	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
+
+	// 检查是否已存在相同的webhook
+	existingWebhook, err := h.gitlabService.FindWebhookByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "检查现有webhook失败: " + err.Error()})
+		return
+	}
+
+	var response models.SyncGitLabWebhookResponse
+	now := time.Now()
+
+	if existingWebhook != nil {
+		// webhook已存在，更新项目状态
+		project.GitLabWebhookID = &existingWebhook.ID
+		project.WebhookSynced = true
+		project.LastSyncAt = &now
+
+		response = models.SyncGitLabWebhookResponse{
+			Success:         true,
+			Message:         "Webhook已存在，状态已更新",
+			GitLabWebhookID: &existingWebhook.ID,
+			WebhookURL:      webhookURL,
+		}
+	} else {
+		// 创建新的webhook
+		gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
+		webhook, err := gitlabService.CreateProjectWebhook(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建GitLab webhook失败: " + err.Error()})
+			return
+		}
+
+		// 更新项目状态
+		project.GitLabWebhookID = &webhook.ID
+		project.WebhookSynced = true
+		project.LastSyncAt = &now
+
+		response = models.SyncGitLabWebhookResponse{
+			Success:         true,
+			Message:         "GitLab webhook创建成功",
+			GitLabWebhookID: &webhook.ID,
+			WebhookURL:      webhookURL,
+		}
+	}
+
+	// 保存项目状态
+	if err := h.db.Save(&project).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存项目状态失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// DeleteGitLabWebhook 删除GitLab Webhook
+func (h *Handler) DeleteGitLabWebhook(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
+		return
+	}
+
+	var project models.Project
+	if err := h.db.First(&project, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		return
+	}
+
+	if project.GitLabWebhookID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "项目未配置GitLab webhook"})
+		return
+	}
+
+	// 解析GitLab URL以获取基础URL
+	parsed := h.gitlabService.ParseGitLabURL(project.URL)
+	if !parsed.IsValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "项目URL格式无效: " + parsed.Error})
+		return
+	}
+
+	// 删除GitLab中的webhook
+	gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
+	err = gitlabService.DeleteProjectWebhook(parsed.BaseURL, project.GitLabProjectID, *project.GitLabWebhookID, project.AccessToken)
+	if err != nil {
+		logger.GetLogger().Warnf("删除GitLab webhook失败: %v", err)
+		// 即使删除失败也继续更新本地状态，可能是webhook已经被手动删除
+	}
+
+	// 更新项目状态
+	project.GitLabWebhookID = nil
+	project.WebhookSynced = false
+	now := time.Now()
+	project.LastSyncAt = &now
+
+	if err := h.db.Save(&project).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存项目状态失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "GitLab webhook已删除"})
+}
+
+// GetGitLabWebhookStatus 获取GitLab Webhook状态
+func (h *Handler) GetGitLabWebhookStatus(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
+		return
+	}
+
+	var project models.Project
+	if err := h.db.First(&project, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		return
+	}
+
+	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
+
+	// 检查是否有权限管理webhook（通过测试连接来判断）
+	canManage := false
+	if project.AccessToken != "" {
+		parsed := h.gitlabService.ParseGitLabURL(project.URL)
+		if parsed.IsValid {
+			err := h.gitlabService.TestConnection(parsed.BaseURL, project.AccessToken)
+			canManage = (err == nil)
+		}
+	}
+
+	response := models.GitLabWebhookStatusResponse{
+		ProjectID:       project.ID,
+		WebhookSynced:   project.WebhookSynced,
+		GitLabWebhookID: project.GitLabWebhookID,
+		WebhookURL:      webhookURL,
+		LastSyncAt:      project.LastSyncAt,
+		CanManage:       canManage,
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// autoCreateGitLabWebhook 自动创建GitLab webhook
+func (h *Handler) autoCreateGitLabWebhook(project *models.Project) {
+	// 解析GitLab URL
+	parsed := h.gitlabService.ParseGitLabURL(project.URL)
+	if !parsed.IsValid {
+		logger.GetLogger().Warnf("项目 %d URL格式无效，跳过webhook创建: %s", project.ID, parsed.Error)
+		return
+	}
+
+	// 构建webhook URL
+	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
+
+	// 检查是否已存在相同的webhook
+	existingWebhook, err := h.gitlabService.FindWebhookByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+	if err != nil {
+		logger.GetLogger().Warnf("检查项目 %d 现有webhook失败: %v", project.ID, err)
+		return
+	}
+
+	now := time.Now()
+
+	if existingWebhook != nil {
+		// webhook已存在，更新项目状态
+		project.GitLabWebhookID = &existingWebhook.ID
+		project.WebhookSynced = true
+		project.LastSyncAt = &now
+		logger.GetLogger().Infof("项目 %d 的GitLab webhook已存在，状态已更新", project.ID)
+	} else {
+		// 创建新的webhook
+		gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
+		webhook, err := gitlabService.CreateProjectWebhook(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+		if err != nil {
+			logger.GetLogger().Warnf("为项目 %d 创建GitLab webhook失败: %v", project.ID, err)
+			return
+		}
+
+		// 更新项目状态
+		project.GitLabWebhookID = &webhook.ID
+		project.WebhookSynced = true
+		project.LastSyncAt = &now
+		logger.GetLogger().Infof("项目 %d 的GitLab webhook创建成功，ID: %d", project.ID, webhook.ID)
+	}
+
+	// 保存项目状态（忽略错误，避免影响主流程）
+	if err := h.db.Save(project).Error; err != nil {
+		logger.GetLogger().Warnf("保存项目 %d webhook状态失败: %v", project.ID, err)
+	}
+}
+
+// autoDeleteGitLabWebhook 自动删除GitLab webhook
+func (h *Handler) autoDeleteGitLabWebhook(project *models.Project) {
+	// 解析GitLab URL
+	parsed := h.gitlabService.ParseGitLabURL(project.URL)
+	if !parsed.IsValid {
+		logger.GetLogger().Warnf("项目 %d URL格式无效，跳过webhook删除: %s", project.ID, parsed.Error)
+		return
+	}
+
+	// 删除GitLab中的webhook
+	gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
+	err := gitlabService.DeleteProjectWebhook(parsed.BaseURL, project.GitLabProjectID, *project.GitLabWebhookID, project.AccessToken)
+	if err != nil {
+		logger.GetLogger().Warnf("删除项目 %d 的GitLab webhook失败: %v", project.ID, err)
+		// 即使删除失败也继续，可能是webhook已经被手动删除
+	} else {
+		logger.GetLogger().Infof("项目 %d 的GitLab webhook已删除", project.ID)
 	}
 }

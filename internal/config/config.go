@@ -12,6 +12,7 @@ type Config struct {
 	DatabasePath              string `mapstructure:"database_path"`
 	GitLabURL                 string `mapstructure:"gitlab_url"`
 	RedirectServerURL         string `mapstructure:"redirect_server_url"`
+	PublicWebhookURL          string `mapstructure:"public_webhook_url"`
 	DefaultWebhookURL         string `mapstructure:"default_webhook_url"`
 	GitLabPersonalAccessToken string `mapstructure:"gitlab_personal_access_token"`
 }
