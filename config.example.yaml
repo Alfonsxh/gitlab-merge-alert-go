@@ -12,16 +12,13 @@ database_path: ./data/gitlab-merge-alert.db
 
 # GitLab 配置
 gitlab_url: "https://your-gitlab-server.com"  # 替换为您的GitLab服务器地址
+gitlab_personal_access_token: "YOUR-GITLAB-TOKEN"  # 替换为您的GitLab个人访问令牌
 
 # 服务器URL配置
-redirect_server_url: "http://localhost:1688"
 public_webhook_url: "http://localhost:1688"
-
-# 企业微信机器人配置
-default_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-WEBHOOK-KEY"  # 替换为您的企业微信机器人webhook地址
 
 # 注意：
 # 1. 请勿将包含真实密钥的配置文件提交到版本控制系统
 # 2. 生产环境建议使用环境变量来配置敏感信息
 # 3. 支持的环境变量前缀：GMA_
-#    例如：GMA_GITLAB_URL, GMA_DEFAULT_WEBHOOK_URL
+#    例如：GMA_GITLAB_URL, GMA_GITLAB_PERSONAL_ACCESS_TOKEN

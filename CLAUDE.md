@@ -114,7 +114,6 @@ cp config.example.yaml config.local.yaml
 **方法2: 环境变量**
 ```bash
 export GMA_GITLAB_URL="https://your-gitlab-server.com"
-export GMA_DEFAULT_WEBHOOK_URL="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-KEY"
 export GMA_GITLAB_PERSONAL_ACCESS_TOKEN="your-gitlab-token"
 ```
 
@@ -122,7 +121,7 @@ export GMA_GITLAB_PERSONAL_ACCESS_TOKEN="your-gitlab-token"
 - `host/port`: 服务监听地址
 - `database_path`: SQLite 数据库路径
 - `gitlab_url`: GitLab 服务器地址 (**敏感**)
-- `default_webhook_url`: 企业微信机器人地址 (**敏感**)
+- `public_webhook_url`: 对外暴露的 webhook 地址
 - `gitlab_personal_access_token`: GitLab 访问令牌 (**敏感**)
 
 ### 数据库

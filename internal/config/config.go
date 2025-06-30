@@ -14,9 +14,7 @@ type Config struct {
 	LogLevel                  string `mapstructure:"log_level"`
 	DatabasePath              string `mapstructure:"database_path"`
 	GitLabURL                 string `mapstructure:"gitlab_url" json:"-"`                 // 敏感字段不输出到日志
-	RedirectServerURL         string `mapstructure:"redirect_server_url"`
 	PublicWebhookURL          string `mapstructure:"public_webhook_url"`
-	DefaultWebhookURL         string `mapstructure:"default_webhook_url" json:"-"`         // 敏感字段不输出到日志
 	GitLabPersonalAccessToken string `mapstructure:"gitlab_personal_access_token" json:"-"` // 敏感字段不输出到日志
 }
 
@@ -25,9 +23,6 @@ func (c *Config) MaskSensitive() Config {
 	masked := *c
 	if masked.GitLabURL != "" {
 		masked.GitLabURL = maskURL(masked.GitLabURL)
-	}
-	if masked.DefaultWebhookURL != "" {
-		masked.DefaultWebhookURL = maskWebhookURL(masked.DefaultWebhookURL)
 	}
 	if masked.GitLabPersonalAccessToken != "" {
 		masked.GitLabPersonalAccessToken = "****"
@@ -51,18 +46,6 @@ func maskURL(url string) string {
 	return "****"
 }
 
-func maskWebhookURL(url string) string {
-	if url == "" {
-		return ""
-	}
-	if strings.Contains(url, "key=") {
-		parts := strings.Split(url, "key=")
-		if len(parts) == 2 {
-			return parts[0] + "key=****"
-		}
-	}
-	return "****"
-}
 
 func Load() (*Config, error) {
 	// 配置文件查找优先级：config.local.yaml > config.yaml > 环境变量
@@ -77,7 +60,6 @@ func Load() (*Config, error) {
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("log_level", "info")
 	viper.SetDefault("database_path", "./data/gitlab-merge-alert.db")
-	viper.SetDefault("redirect_server_url", "http://localhost:1688")
 
 	// 环境变量绑定（优先级最高）
 	viper.SetEnvPrefix("GMA")
@@ -121,12 +103,8 @@ func validateConfig(config *Config) error {
 		missingFields = append(missingFields, "gitlab_url (GitLab服务器地址)")
 	}
 
-	if config.DefaultWebhookURL == "" || strings.Contains(config.DefaultWebhookURL, "YOUR-WEBHOOK-KEY") {
-		missingFields = append(missingFields, "default_webhook_url (企业微信机器人webhook地址)")
-	}
-
 	if len(missingFields) > 0 {
-		return fmt.Errorf("缺少必要的配置项: %s\n\n请在以下位置之一配置这些敏感信息:\n1. 创建 config.local.yaml 文件\n2. 设置环境变量 (GMA_GITLAB_URL, GMA_DEFAULT_WEBHOOK_URL)\n3. 参考 config.example.yaml 了解配置格式", strings.Join(missingFields, ", "))
+		return fmt.Errorf("缺少必要的配置项: %s\n\n请在以下位置之一配置这些敏感信息:\n1. 创建 config.local.yaml 文件\n2. 设置环境变量 (GMA_GITLAB_URL)\n3. 参考 config.example.yaml 了解配置格式", strings.Join(missingFields, ", "))
 	}
 
 	return nil
