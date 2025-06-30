@@ -247,8 +247,13 @@ func (s *GitLabService) GetProjectByPath(baseURL, projectPath, accessToken strin
 }
 
 // GetProject 通过项目ID获取项目信息（保持原有兼容性）
-func (s *GitLabService) GetProject(projectID int) (*GitLabProjectInfo, error) {
-	return s.GetProjectByPath(s.baseURL, fmt.Sprintf("%d", projectID), s.accessToken)
+// 接受一个可选的accessToken参数，如果提供，则优先使用该token进行认证
+func (s *GitLabService) GetProject(projectID int, accessToken ...string) (*GitLabProjectInfo, error) {
+	token := s.accessToken
+	if len(accessToken) > 0 && accessToken[0] != "" {
+		token = accessToken[0]
+	}
+	return s.GetProjectByPath(s.baseURL, fmt.Sprintf("%d", projectID), token)
 }
 
 // TestConnection 测试GitLab连接和token有效性

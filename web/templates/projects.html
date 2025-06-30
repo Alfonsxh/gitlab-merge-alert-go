@@ -442,13 +442,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <div class="form-check">
-                                <input type="checkbox" class="form-check-input" id="save_token" v-model="saveAccessToken">
-                                <label class="form-check-label" for="save_token">
-                                    保存访问令牌到项目中（用于后续webhook验证）
-                                </label>
-                                <div class="form-text">访问令牌将加密存储，仅用于验证webhook合法性</div>
-                            </div>
+                            
                         </div>
                     </div>
 
@@ -694,7 +688,6 @@
                     // UI状态控制
                     showToken: false,
                     showTokenHelp: false,
-                    saveAccessToken: false,
                     urlParsing: false,
                     connectionTesting: false,
                     projectSaving: false,
@@ -843,7 +836,6 @@
                     this.isBatchMode = false;
                     this.showToken = false;
                     this.showTokenHelp = false;
-                    this.saveAccessToken = false;
                     this.urlParsing = false;
                     this.connectionTesting = false;
                     this.projectSaving = false;
@@ -1050,7 +1042,7 @@
                                 name: this.parsedProjectInfo.name,
                                 url: this.parsedProjectInfo.web_url,
                                 description: this.parsedProjectInfo.description || '',
-                                access_token: this.saveAccessToken ? this.urlParseForm.access_token : ''
+                                access_token: this.urlParseForm.access_token
                             };
                             
                             await axios.post('/api/v1/projects', projectData);

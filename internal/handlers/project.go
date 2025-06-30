@@ -67,10 +67,11 @@ func (h *Handler) CreateProject(c *gin.Context) {
 
 	// 验证GitLab项目是否存在
 	if h.gitlabService != nil {
-		_, err := h.gitlabService.GetProject(req.GitLabProjectID)
+		// 优先使用请求中提供的token进行验证
+		_, err := h.gitlabService.GetProject(req.GitLabProjectID, req.AccessToken)
 		if err != nil {
 			logger.GetLogger().Errorf("Failed to fetch GitLab project [ID: %d]: %v", req.GitLabProjectID, err)
-			h.response.Error(c, "GitLab项目不存在或访问被拒绝")
+			h.response.Error(c, "保存项目失败: GitLab项目不存在或访问被拒绝")
 			return
 		}
 	}
