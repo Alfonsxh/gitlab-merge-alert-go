@@ -13,7 +13,7 @@ type Config struct {
 	Environment               string `mapstructure:"environment"`
 	LogLevel                  string `mapstructure:"log_level"`
 	DatabasePath              string `mapstructure:"database_path"`
-	GitLabURL                 string `mapstructure:"gitlab_url" json:"-"`                 // 敏感字段不输出到日志
+	GitLabURL                 string `mapstructure:"gitlab_url" json:"-"` // 敏感字段不输出到日志
 	PublicWebhookURL          string `mapstructure:"public_webhook_url"`
 	GitLabPersonalAccessToken string `mapstructure:"gitlab_personal_access_token" json:"-"` // 敏感字段不输出到日志
 }
@@ -45,7 +45,6 @@ func maskURL(url string) string {
 	}
 	return "****"
 }
-
 
 func Load() (*Config, error) {
 	// 配置文件查找优先级：config.local.yaml > config.yaml > 环境变量

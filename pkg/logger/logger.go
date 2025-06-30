@@ -32,7 +32,10 @@ func Init(level string) {
 		}
 	}
 
-	log.SetFormatter(&logrus.JSONFormatter{})
+	log.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+		ForceColors:   true,
+	})
 
 	// 设置日志级别
 	switch level {

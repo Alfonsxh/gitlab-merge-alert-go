@@ -43,10 +43,7 @@ type GitLabProject struct {
 	ID        int    `json:"id"`
 	Name      string `json:"name"`
 	WebURL    string `json:"web_url"`
-	Namespace struct {
-		Name string `json:"name"`
-		Path string `json:"path"`
-	} `json:"namespace"`
+	Namespace string `json:"namespace"`
 }
 
 type GitLabRepository struct {
@@ -65,6 +62,12 @@ type GitLabMergeRequest struct {
 	SourceBranch string `json:"source_branch"`
 	TargetBranch string `json:"target_branch"`
 	URL          string `json:"url"`
+}
+
+// AssigneeInfo 用于在通知处理过程中传递指派人信息
+type AssigneeInfo struct {
+	Email    string `json:"email"`
+	Username string `json:"username"`
 }
 
 type NotificationResponse struct {

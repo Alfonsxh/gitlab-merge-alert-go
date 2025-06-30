@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"gitlab-merge-alert-go/pkg/logger"
 )
 
 type WeChatService struct {
@@ -27,27 +29,40 @@ type WeChatMessage struct {
 }
 
 func (s *WeChatService) SendMessage(webhookURL, content string, mentionedMobiles []string) error {
+	logger.GetLogger().Infof("准备发送企业微信消息到: %s", webhookURL)
+	logger.GetLogger().Infof("消息内容: %s", content)
+	logger.GetLogger().Infof("需要@的手机号列表: %v", mentionedMobiles)
+
 	message := WeChatMessage{
 		MsgType: "text",
 	}
 	message.Text.Content = content
 	message.Text.MentionedMobileList = mentionedMobiles
 
+	// 记录完整的发送数据
+	if messageJSON, err := json.MarshalIndent(message, "", "  "); err == nil {
+		logger.GetLogger().Infof("发送给企业微信的完整消息结构:\n%s", string(messageJSON))
+	}
+
 	jsonData, err := json.Marshal(message)
 	if err != nil {
+		logger.GetLogger().Errorf("序列化消息失败: %v", err)
 		return err
 	}
 
 	resp, err := s.client.Post(webhookURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
+		logger.GetLogger().Errorf("发送企业微信消息失败: %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logger.GetLogger().Errorf("企业微信 API 返回错误状态码: %d", resp.StatusCode)
 		return fmt.Errorf("WeChat API returned status %d", resp.StatusCode)
 	}
 
+	logger.GetLogger().Infof("企业微信消息发送成功")
 	return nil
 }
 

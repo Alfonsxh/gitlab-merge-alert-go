@@ -27,12 +27,13 @@ func (h *Handler) GetUsers(c *gin.Context) {
 	var responses []models.UserResponse
 	for _, user := range users {
 		responses = append(responses, models.UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			Phone:     user.Phone,
-			Name:      user.Name,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
+			ID:             user.ID,
+			Email:          user.Email,
+			Phone:          user.Phone,
+			Name:           user.Name,
+			GitLabUsername: user.GitLabUsername,
+			CreatedAt:      user.CreatedAt,
+			UpdatedAt:      user.UpdatedAt,
 		})
 	}
 
@@ -47,9 +48,10 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	}
 
 	user := &models.User{
-		Email: req.Email,
-		Phone: req.Phone,
-		Name:  req.Name,
+		Email:          req.Email,
+		Phone:          req.Phone,
+		Name:           req.Name,
+		GitLabUsername: req.GitLabUsername,
 	}
 
 	if err := h.db.Create(user).Error; err != nil {
@@ -67,12 +69,13 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	logger.GetLogger().Infof("Successfully created user [ID: %d, Email: %s]", user.ID, user.Email)
 
 	response := models.UserResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		Phone:     user.Phone,
-		Name:      user.Name,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
+		ID:             user.ID,
+		Email:          user.Email,
+		Phone:          user.Phone,
+		Name:           user.Name,
+		GitLabUsername: user.GitLabUsername,
+		CreatedAt:      user.CreatedAt,
+		UpdatedAt:      user.UpdatedAt,
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": response})
@@ -113,6 +116,8 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	if req.Name != "" {
 		user.Name = req.Name
 	}
+	// 允许清空 GitLab 用户名
+	user.GitLabUsername = req.GitLabUsername
 
 	if err := h.db.Save(&user).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to update user [ID: %d]: %v", id, err)
@@ -129,12 +134,13 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	logger.GetLogger().Infof("Successfully updated user [ID: %d, Email: %s]", user.ID, user.Email)
 
 	response := models.UserResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		Phone:     user.Phone,
-		Name:      user.Name,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
+		ID:             user.ID,
+		Email:          user.Email,
+		Phone:          user.Phone,
+		Name:           user.Name,
+		GitLabUsername: user.GitLabUsername,
+		CreatedAt:      user.CreatedAt,
+		UpdatedAt:      user.UpdatedAt,
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})

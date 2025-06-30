@@ -69,6 +69,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	if h.gitlabService != nil {
 		_, err := h.gitlabService.GetProject(req.GitLabProjectID)
 		if err != nil {
+			logger.GetLogger().Errorf("Failed to fetch GitLab project [ID: %d]: %v", req.GitLabProjectID, err)
 			h.response.Error(c, "GitLab项目不存在或访问被拒绝")
 			return
 		}
@@ -85,8 +86,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	err := h.db.Where(&models.Project{GitLabProjectID: req.GitLabProjectID}).First(&existingProject).Error
 	if err == nil {
 		// 项目已存在
-		logger.GetLogger().Warnf("Attempt to create existing project [GitLab ID: %d, Name: %s] from IP: %s",
-			req.GitLabProjectID, req.Name, c.ClientIP())
+		logger.GetLogger().Warnf("Attempt to create existing project [GitLab ID: %d, Name: %s] from IP: %s", req.GitLabProjectID, req.Name, c.ClientIP())
 		h.response.Conflict(c, "GitLab项目ID已存在，如需重新配置请先删除现有项目")
 		return
 	} else if err != gorm.ErrRecordNotFound {

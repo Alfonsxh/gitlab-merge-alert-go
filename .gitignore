@@ -69,3 +69,10 @@ coverage.out
 
 # Air live reload tool
 tmp/
+
+# Test files with sensitive data
+tests/*
+
+# HTTP request files (may contain sensitive data)
+*.http
+*.rest

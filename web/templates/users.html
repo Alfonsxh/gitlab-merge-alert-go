@@ -100,6 +100,7 @@
                                             <th>ID</th>
                                             <th>邮箱</th>
                                             <th>手机号</th>
+                                            <th>GitLab用户名</th>
                                             <th>创建时间</th>
                                             <th>操作</th>
                                         </tr>
@@ -109,6 +110,7 @@
                                             <td v-text="user.id">-</td>
                                             <td v-text="user.email">-</td>
                                             <td v-text="user.phone">-</td>
+                                            <td v-text="user.gitlab_username || '-'">-</td>
                                             <td v-text="formatDate(user.created_at)">-</td>
                                             <td>
                                                 <button class="btn btn-sm btn-outline-primary me-1" @click="editUser(user)">
@@ -137,13 +139,18 @@
                                     <form @submit.prevent="saveUser">
                                         <div class="mb-3">
                                             <label for="email" class="form-label">邮箱 *</label>
-                                            <input type="email" class="form-control" id="email" v-model="currentUser.email" required>
+                                            <input type="email" class="form-control" id="email" v-model="currentUser.email" @input="onEmailInput" required>
                                             <div class="form-text">请输入GitLab上的用户邮箱</div>
                                         </div>
                                         <div class="mb-3">
                                             <label for="phone" class="form-label">手机号 *</label>
                                             <input type="tel" class="form-control" id="phone" v-model="currentUser.phone" required>
                                             <div class="form-text">请输入企业微信上注册的手机号</div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="gitlab_username" class="form-label">GitLab用户名</label>
+                                            <input type="text" class="form-control" id="gitlab_username" v-model="currentUser.gitlab_username" @input="onGitLabUsernameInput">
+                                            <div class="form-text">请输入GitLab中的用户名（用于处理邮箱被脱敏的情况）。系统会自动从邮箱提取用户名，您也可以手动修改。</div>
                                         </div>
                                     </form>
                                 </div>
@@ -173,9 +180,11 @@
                     currentUser: {
                         id: null,
                         email: '',
-                        phone: ''
+                        phone: '',
+                        gitlab_username: ''
                     },
-                    isEditing: false
+                    isEditing: false,
+                    userModifiedGitLabUsername: false
                 }
             },
             methods: {
@@ -192,15 +201,18 @@
                     this.currentUser = {
                         id: null,
                         email: '',
-                        phone: ''
+                        phone: '',
+                        gitlab_username: ''
                     };
                     this.isEditing = false;
+                    this.userModifiedGitLabUsername = false;
                     const modal = new bootstrap.Modal(document.getElementById('userModal'));
                     modal.show();
                 },
                 editUser(user) {
                     this.currentUser = { ...user };
                     this.isEditing = true;
+                    this.userModifiedGitLabUsername = true; // 编辑模式下认为用户已修改过GitLab用户名
                     const modal = new bootstrap.Modal(document.getElementById('userModal'));
                     modal.show();
                 },
@@ -236,6 +248,26 @@
                 },
                 formatDate(dateString) {
                     return new Date(dateString).toLocaleString('zh-CN');
+                },
+                onEmailInput(event) {
+                    // 只在新增模式且用户没有手动修改过GitLab用户名时自动填充
+                    if (!this.isEditing && !this.userModifiedGitLabUsername) {
+                        const email = event.target.value;
+                        if (email && email.includes('@')) {
+                            const username = email.split('@')[0];
+                            this.currentUser.gitlab_username = username;
+                        }
+                    }
+                },
+                extractUsernameFromEmail(email) {
+                    if (!email || !email.includes('@')) {
+                        return '';
+                    }
+                    return email.split('@')[0];
+                },
+                onGitLabUsernameInput() {
+                    // 当用户手动修改GitLab用户名时，标记为已修改
+                    this.userModifiedGitLabUsername = true;
                 }
             },
             mounted() {
