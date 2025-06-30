@@ -9,6 +9,7 @@ func GetAllMigrations() []Migration {
 	return []Migration{
 		&Migration001CreateInitialTables{},
 		&Migration002FixNotNullConstraints{},
+		&Migration003FixGitLabWebhookIDColumnName{},
 	}
 }
 

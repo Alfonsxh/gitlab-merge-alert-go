@@ -17,6 +17,7 @@ type Handler struct {
 	gitlabService *services.GitLabService
 	wechatService *services.WeChatService
 	notifyService *services.NotificationService
+	response      *ResponseHelper
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Handler {
@@ -30,6 +31,7 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 		gitlabService: gitlabService,
 		wechatService: wechatService,
 		notifyService: notifyService,
+		response:      NewResponseHelper(),
 	}
 }
 

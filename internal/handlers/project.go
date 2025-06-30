@@ -61,7 +61,7 @@ func (h *Handler) GetProjects(c *gin.Context) {
 func (h *Handler) CreateProject(c *gin.Context) {
 	var req models.CreateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.response.ValidationError(c, err.Error())
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	if h.gitlabService != nil {
 		_, err := h.gitlabService.GetProject(req.GitLabProjectID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "GitLab project not found or access denied"})
+			h.response.Error(c, "GitLab项目不存在或访问被拒绝")
 			return
 		}
 	}
@@ -85,13 +85,14 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	err := h.db.Where(&models.Project{GitLabProjectID: req.GitLabProjectID}).First(&existingProject).Error
 	if err == nil {
 		// 项目已存在
-		logger.GetLogger().Warnf("Project with GitLab ID %d already exists", req.GitLabProjectID)
-		c.JSON(http.StatusConflict, gin.H{"error": "Project already exists"})
+		logger.GetLogger().Warnf("Attempt to create existing project [GitLab ID: %d, Name: %s] from IP: %s",
+			req.GitLabProjectID, req.Name, c.ClientIP())
+		h.response.Conflict(c, "GitLab项目ID已存在，如需重新配置请先删除现有项目")
 		return
 	} else if err != gorm.ErrRecordNotFound {
 		// 其他数据库错误
-		logger.GetLogger().Errorf("Failed to check existing project: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		logger.GetLogger().Errorf("Database error while checking existing project [GitLab ID: %d]: %v", req.GitLabProjectID, err)
+		h.response.InternalError(c, "数据库查询失败")
 		return
 	}
 
@@ -107,8 +108,14 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	}
 
 	if err := h.db.Create(project).Error; err != nil {
-		logger.GetLogger().Errorf("Failed to create project: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
+		logger.GetLogger().Errorf("Failed to create project [GitLab ID: %d]: %v", req.GitLabProjectID, err)
+
+		// 处理UNIQUE约束冲突
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: projects.gitlab_project_id") {
+			h.response.Conflict(c, "GitLab项目ID已存在，如需重新配置请先删除现有项目")
+		} else {
+			h.response.InternalError(c, "创建项目失败")
+		}
 		return
 	}
 
@@ -117,7 +124,8 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		h.autoCreateGitLabWebhook(project)
 	}
 
-	message := "Project created successfully"
+	logger.GetLogger().Infof("Successfully created project [ID: %d, GitLab ID: %d, Name: %s] from IP: %s",
+		project.ID, project.GitLabProjectID, project.Name, c.ClientIP())
 
 	response := models.ProjectResponse{
 		ID:                project.ID,
@@ -133,7 +141,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		UpdatedAt:         project.UpdatedAt,
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": response, "message": message})
+	h.response.Created(c, response)
 }
 
 func (h *Handler) UpdateProject(c *gin.Context) {
@@ -536,13 +544,20 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 		return
 	}
 
-	response := models.BatchCreateProjectsResponse{
-		SuccessCount: successCount,
-		FailureCount: failureCount,
-		Results:      results,
+	// 转换为新的批量响应格式
+	var batchResults []models.BatchResultItem
+	for _, result := range results {
+		batchResults = append(batchResults, models.BatchResultItem{
+			ID:      result.GitLabProjectID,
+			Name:    result.Name,
+			Success: result.Success,
+			Error:   result.Error,
+			Data:    map[string]interface{}{"project_id": result.ProjectID},
+		})
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": response})
+	// 使用新的统一响应格式
+	h.response.BatchOperation(c, successCount, failureCount, batchResults)
 }
 
 func (h *Handler) ProjectsPage(c *gin.Context) {

@@ -919,14 +919,28 @@
                             webhook_config: webhookConfig
                         };
 
-                        const response = await axios.post('/api/v1/projects/batch-create', requestData);
+                        let response;
+                        try {
+                            response = await axios.post('/api/v1/projects/batch-create', requestData);
+                        } catch (error) {
+                            // 检查是否是批量创建的部分失败情况 (400或207状态码)
+                            // 新的统一响应格式下，这些也会在响应中包含完整数据
+                            if (error.response && (error.response.status === 400 || error.response.status === 207) && error.response.data?.data) {
+                                response = error.response; // 将错误响应当作成功响应处理
+                            } else {
+                                throw error; // 重新抛出真正的错误
+                            }
+                        }
                         
                         const modal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
                         modal.hide();
                         
+                        // 适配新的统一响应格式
+                        const apiResponse = response.data;
+                        const result = apiResponse.data; // 批量操作数据在 data.data 中
+                        
                         // 显示批量创建结果
-                        const result = response.data.data;
-                        let message = `批量创建完成！\n成功: ${result.success_count} 个项目\n失败: ${result.failure_count} 个项目`;
+                        let message = `${apiResponse.message}\n成功: ${result.success_count} 个项目\n失败: ${result.failure_count} 个项目`;
                         
                         if (result.failure_count > 0) {
                             message += '\n\n失败的项目：';
@@ -934,6 +948,9 @@
                                 message += `\n• ${r.name}: ${r.error}`;
                             });
                         }
+                        
+                        // 显示批量创建结果给用户
+                        alert(message);
                         
                         await this.loadProjects();
                         this.resetAddProjectState();
@@ -1050,7 +1067,9 @@
                         }
                     } catch (error) {
                         console.error('Failed to save project:', error);
-                        alert('保存项目失败: ' + (error.response?.data?.error || error.message));
+                        // 适配新的统一响应格式
+                        const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message;
+                        alert('保存项目失败: ' + errorMessage);
                     } finally {
                         this.projectSaving = false;
                     }
