@@ -444,6 +444,17 @@
                         <div class="mb-3">
                             
                         </div>
+
+                        <div class="mb-3">
+                            <label for="webhook_id_single" class="form-label">关联Webhook (可选)</label>
+                            <select class="form-select" id="webhook_id_single" v-model="parsedProjectInfo.webhook_id">
+                                <option value="">不关联任何Webhook</option>
+                                <template v-for="webhook in allWebhooks" :key="webhook?.id || Math.random()">
+                                    <option v-if="webhook && webhook.id" :value="webhook.id" v-text="webhook.name + ' - ' + webhook.url"></option>
+                                </template>
+                            </select>
+                            <div class="form-text">选择一个现有的Webhook与此项目关联</div>
+                        </div>
                     </div>
 
                     <!-- 批量创建确认页面 -->
@@ -536,6 +547,16 @@
                                 <label for="edit_access_token" class="form-label">访问令牌</label>
                                 <input type="password" class="form-control" id="edit_access_token" v-model="currentProject.access_token">
                                 <div class="form-text">留空表示不更改现有令牌</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">关联Webhooks</label>
+                                <div class="list-group" style="max-height: 150px; overflow-y: auto;">
+                                    <label v-for="webhook in allWebhooks" :key="webhook.id" class="list-group-item">
+                                        <input class="form-check-input me-1" type="checkbox" :value="webhook.id" v-model="currentProject.webhook_ids">
+                                        <span v-text="webhook.name"></span>
+                                        <small class="text-muted d-block" v-text="webhook.url"></small>
+                                    </label>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -954,7 +975,13 @@
                     }
                 },
                 editProject(project) {
-                    this.currentProject = { ...project };
+                    const projectCopy = { ...project };
+                    if (projectCopy.webhooks && Array.isArray(projectCopy.webhooks)) {
+                        projectCopy.webhook_ids = projectCopy.webhooks.map(wh => wh.id);
+                    } else {
+                        projectCopy.webhook_ids = [];
+                    }
+                    this.currentProject = projectCopy;
                     this.isEditing = true;
                     const modal = new bootstrap.Modal(document.getElementById('projectModal'));
                     modal.show();
@@ -1033,8 +1060,16 @@
                     
                     try {
                         if (this.isEditing) {
-                            // 编辑模式：使用currentProject数据
-                            await axios.put(`/api/v1/projects/${this.currentProject.id}`, this.currentProject);
+                            // 编辑模式：只发送后端需要的字段，确保类型正确
+                            const payload = {
+                                name: this.currentProject.name,
+                                url: this.currentProject.url,
+                                description: this.currentProject.description,
+                                access_token: this.currentProject.access_token,
+                                auto_manage_webhook: this.currentProject.auto_manage_webhook,
+                                webhook_ids: Array.isArray(this.currentProject.webhook_ids) ? this.currentProject.webhook_ids : []
+                            };
+                            await axios.put(`/api/v1/projects/${this.currentProject.id}`, payload);
                         } else {
                             // 添加模式：使用解析出的项目信息
                             const projectData = {
@@ -1042,7 +1077,8 @@
                                 name: this.parsedProjectInfo.name,
                                 url: this.parsedProjectInfo.web_url,
                                 description: this.parsedProjectInfo.description || '',
-                                access_token: this.urlParseForm.access_token
+                                access_token: this.urlParseForm.access_token,
+                                webhook_id: this.parsedProjectInfo.webhook_id || null
                             };
                             
                             await axios.post('/api/v1/projects', projectData);

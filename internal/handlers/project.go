@@ -115,9 +115,22 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: projects.gitlab_project_id") {
 			h.response.Conflict(c, "GitLab项目ID已存在，如需重新配置请先删除现有项目")
 		} else {
-			h.response.InternalError(c, "创建项目失败")
+			h.response.InternalError(c, "创建项目���败")
 		}
 		return
+	}
+
+	// 关联 Webhook
+	if req.WebhookID != nil {
+		projectWebhook := &models.ProjectWebhook{
+			ProjectID: project.ID,
+			WebhookID: *req.WebhookID,
+		}
+		if err := h.db.Create(projectWebhook).Error; err != nil {
+			// 即使关联失败，项目也已创建成功，只记录日志
+			logger.GetLogger().Errorf("Failed to associate webhook [ID: %d] with project [ID: %d]: %v",
+				*req.WebhookID, project.ID, err)
+		}
 	}
 
 	// 如果启用了自动管理webhook，尝试创建GitLab webhook
@@ -181,6 +194,38 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		project.AutoManageWebhook = *req.AutoManageWebhook
 	}
 
+	// 更新 Webhook 关联
+	if req.WebhookIDs != nil {
+		// 使用事务确保原子性
+		err := h.db.Transaction(func(tx *gorm.DB) error {
+			// 1. 删除现有所有关联
+			if err := tx.Where("project_id = ?", project.ID).Delete(&models.ProjectWebhook{}).Error; err != nil {
+				return err
+			}
+
+			// 2. 创建新的关联
+			if len(req.WebhookIDs) > 0 {
+				var newAssociations []models.ProjectWebhook
+				for _, webhookID := range req.WebhookIDs {
+					newAssociations = append(newAssociations, models.ProjectWebhook{
+						ProjectID: project.ID,
+						WebhookID: webhookID,
+					})
+				}
+				if err := tx.Create(&newAssociations).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+
+		if err != nil {
+			logger.GetLogger().Errorf("Failed to update project webhooks [ID: %d]: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新项目关联的webhook失败"})
+			return
+		}
+	}
+
 	if err := h.db.Save(&project).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to update project [ID: %d]: %v", id, err)
 
@@ -194,6 +239,12 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 
 	logger.GetLogger().Infof("Successfully updated project [ID: %d, Name: %s]", project.ID, project.Name)
 
+	// 重新加载项目以包含更新后的 Webhooks
+	if err := h.db.Preload("Webhooks").First(&project, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found after update"})
+		return
+	}
+
 	response := models.ProjectResponse{
 		ID:                project.ID,
 		GitLabProjectID:   project.GitLabProjectID,
@@ -206,6 +257,19 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		LastSyncAt:        project.LastSyncAt,
 		CreatedAt:         project.CreatedAt,
 		UpdatedAt:         project.UpdatedAt,
+	}
+
+	// 转换关联的webhooks
+	for _, webhook := range project.Webhooks {
+		response.Webhooks = append(response.Webhooks, models.WebhookResponse{
+			ID:          webhook.ID,
+			Name:        webhook.Name,
+			URL:         webhook.URL,
+			Description: webhook.Description,
+			IsActive:    webhook.IsActive,
+			CreatedAt:   webhook.CreatedAt,
+			UpdatedAt:   webhook.UpdatedAt,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})

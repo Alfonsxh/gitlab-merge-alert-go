@@ -32,6 +32,7 @@ type CreateProjectRequest struct {
 	Description       string `json:"description"`
 	AccessToken       string `json:"access_token"`
 	AutoManageWebhook *bool  `json:"auto_manage_webhook,omitempty"` // 可选，默认为true
+	WebhookID         *uint  `json:"webhook_id,omitempty"`          // 可选，用于关联的webhook
 }
 
 type UpdateProjectRequest struct {
@@ -40,6 +41,7 @@ type UpdateProjectRequest struct {
 	Description       string `json:"description"`
 	AccessToken       string `json:"access_token"`
 	AutoManageWebhook *bool  `json:"auto_manage_webhook,omitempty"`
+	WebhookIDs        []uint `json:"webhook_ids"`
 }
 
 type ProjectResponse struct {
