@@ -1,4 +1,10 @@
-FROM golang:1.23.8-bullseye AS builder
+FROM golang:1.23-alpine AS builder
+
+# 配置 Alpine 中国大陆镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# 安装基础依赖（纯 Go 构建无需 CGO 依赖）
+RUN apk add --no-cache ca-certificates
 
 # 设置工作目录
 WORKDIR /app
@@ -16,14 +22,17 @@ RUN go mod download
 # 复制源代码
 COPY . .
 
-# 构建应用
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
+# 构建应用（纯 Go 构建，禁用 CGO）
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' -o main ./cmd/server
 
-# 最终镜像 - 使用本地已有的 alpine 镜像
-FROM node:20-alpine
+# 最终镜像 - 使用相同的 Alpine 基础
+FROM alpine:latest
 
-# 安装 SQLite
-RUN apk add --no-cache sqlite ca-certificates
+# 配置 Alpine 中国大陆镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# 安装运行时依赖
+RUN apk add --no-cache ca-certificates
 
 
 WORKDIR /app
@@ -45,4 +54,4 @@ EXPOSE 1688
 ENV GMA_DATABASE_PATH=/data/gitlab-merge-alert.db
 
 # 运行应用
-CMD ["./main"]
+ENTRYPOINT ["./main"]
