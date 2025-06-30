@@ -37,6 +37,14 @@ lint:
 docker-build:
 	docker build -t $(APP_NAME) .
 
+# 构建x86_64架构的Docker镜像
+docker-build-x86:
+	docker build --platform linux/amd64 -t $(APP_NAME):x86_64 .
+
+# 构建多架构Docker镜像并推送
+docker-buildx:
+	docker buildx build --platform linux/amd64,linux/arm64 -t $(APP_NAME):latest --push .
+
 # 运行Docker容器
 docker-run:
 	docker run -d --name $(APP_NAME) \
