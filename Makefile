@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker-build docker-run
+.PHONY: build run test clean docker-build docker-run migrate migrate-status migrate-rollback
 
 # 应用名称
 APP_NAME=gitlab-merge-alert-go
@@ -60,3 +60,18 @@ docker-logs:
 init:
 	mkdir -p data
 	mkdir -p logs
+
+# 运行数据库迁移
+migrate:
+	@echo "Running database migrations..."
+	@go run cmd/migrate/main.go
+
+# 查看迁移状态
+migrate-status:
+	@echo "Checking migration status..."
+	@go run cmd/migrate/main.go -status
+
+# 回滚最后一个迁移
+migrate-rollback:
+	@echo "Rolling back last migration..."
+	@go run cmd/migrate/main.go -rollback

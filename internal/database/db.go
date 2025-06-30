@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/internal/migrations"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -30,12 +30,24 @@ func Init(databasePath string) (*gorm.DB, error) {
 }
 
 func Migrate(db *gorm.DB) error {
-	// 自动迁移数据库表结构
-	return db.AutoMigrate(
-		&models.User{},
-		&models.Project{},
-		&models.Webhook{},
-		&models.ProjectWebhook{},
-		&models.Notification{},
-	)
+	// 使用迁移系统而不是简单的AutoMigrate
+	return RunMigrations(db)
+}
+
+// RunMigrations 运行数据库迁移
+func RunMigrations(db *gorm.DB) error {
+	migrator := migrations.SetupMigrator(db)
+	return migrator.Up()
+}
+
+// MigrationsStatus 查看迁移状态
+func MigrationsStatus(db *gorm.DB) error {
+	migrator := migrations.SetupMigrator(db)
+	return migrator.Status()
+}
+
+// RollbackMigration 回滚迁移
+func RollbackMigration(db *gorm.DB) error {
+	migrator := migrations.SetupMigrator(db)
+	return migrator.Rollback()
 }

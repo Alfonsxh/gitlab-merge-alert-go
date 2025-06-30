@@ -5,21 +5,21 @@ import (
 )
 
 type Project struct {
-	ID              uint   `json:"id" gorm:"primarykey"`
-	GitLabProjectID int    `json:"gitlab_project_id" gorm:"column:gitlab_project_id;uniqueIndex;not null"`
-	Name            string `json:"name" gorm:"not null"`
-	URL             string `json:"url" gorm:"not null"`
-	Description     string `json:"description"`
-	AccessToken     string `json:"-"` // 不在JSON中显示敏感信息
+	ID              uint   `json:"id" gorm:"column:id;primarykey"`
+	GitLabProjectID int    `json:"gitlab_project_id" gorm:"column:gitlab_project_id;uniqueIndex;not null;default:0"`
+	Name            string `json:"name" gorm:"column:name;not null;default:''"`
+	URL             string `json:"url" gorm:"column:url;not null;default:''"`
+	Description     string `json:"description" gorm:"column:description"`
+	AccessToken     string `json:"-" gorm:"column:access_token"` // 不在JSON中显示敏感信息
 
 	// GitLab Webhook相关字段
-	GitLabWebhookID   *int       `json:"gitlab_webhook_id,omitempty" gorm:"index"` // GitLab中webhook的ID
-	WebhookSynced     bool       `json:"webhook_synced" gorm:"default:false"`      // webhook同步状态
-	AutoManageWebhook bool       `json:"auto_manage_webhook" gorm:"default:true"`  // 是否自动管理webhook
-	LastSyncAt        *time.Time `json:"last_sync_at,omitempty"`                   // 最后同步时间
+	GitLabWebhookID   *int       `json:"gitlab_webhook_id,omitempty" gorm:"column:gitlab_webhook_id;index"`  // GitLab中webhook的ID
+	WebhookSynced     bool       `json:"webhook_synced" gorm:"column:webhook_synced;default:false"`          // webhook同步状态
+	AutoManageWebhook bool       `json:"auto_manage_webhook" gorm:"column:auto_manage_webhook;default:true"` // 是否自动管理webhook
+	LastSyncAt        *time.Time `json:"last_sync_at,omitempty" gorm:"column:last_sync_at"`                  // 最后同步时间
 
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at"`
 
 	// 关联关系
 	Webhooks []Webhook `json:"webhooks,omitempty" gorm:"many2many:project_webhooks;"`

@@ -54,7 +54,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 
 	if err := h.db.Create(user).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to create user [Email: %s, Phone: %s]: %v", req.Email, req.Phone, err)
-		
+
 		// 检查是否是唯一约束冲突
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: users.email") {
 			c.JSON(http.StatusConflict, gin.H{"error": "邮箱地址已存在，请使用其他邮箱"})
@@ -116,7 +116,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 
 	if err := h.db.Save(&user).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to update user [ID: %d]: %v", id, err)
-		
+
 		// 检查是否是唯一约束冲突
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: users.email") {
 			c.JSON(http.StatusConflict, gin.H{"error": "邮箱地址已存在，请使用其他邮箱"})

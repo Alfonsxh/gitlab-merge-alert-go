@@ -12,7 +12,7 @@ var log *logrus.Logger
 
 func Init(level string) {
 	log = logrus.New()
-	
+
 	// 确保日志目录存在
 	logDir := "./logs"
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -31,7 +31,7 @@ func Init(level string) {
 			log.SetOutput(multiWriter)
 		}
 	}
-	
+
 	log.SetFormatter(&logrus.JSONFormatter{})
 
 	// 设置日志级别

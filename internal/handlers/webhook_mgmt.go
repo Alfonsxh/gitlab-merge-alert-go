@@ -75,7 +75,7 @@ func (h *Handler) CreateWebhook(c *gin.Context) {
 
 	if err := h.db.Create(webhook).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to create webhook [Name: %s, URL: %s]: %v", req.Name, req.URL, err)
-		
+
 		if strings.Contains(err.Error(), "UNIQUE") {
 			c.JSON(http.StatusConflict, gin.H{"error": "Webhook名称或URL已存在"})
 		} else {
@@ -140,7 +140,7 @@ func (h *Handler) UpdateWebhook(c *gin.Context) {
 
 	if err := h.db.Save(&webhook).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to update webhook [ID: %d]: %v", id, err)
-		
+
 		if strings.Contains(err.Error(), "UNIQUE") {
 			c.JSON(http.StatusConflict, gin.H{"error": "Webhook名称或URL已存在"})
 		} else {

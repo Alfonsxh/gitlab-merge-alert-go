@@ -174,7 +174,7 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 
 	if err := h.db.Save(&project).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to update project [ID: %d]: %v", id, err)
-		
+
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: projects.gitlab_project_id") {
 			c.JSON(http.StatusConflict, gin.H{"error": "GitLab项目ID已存在"})
 		} else {
