@@ -43,16 +43,27 @@ GitLab Merge Request 通知服务的 Golang 重构版本，用于将 GitLab 的�
 
 4. **配置应用**
    
-   编辑 `config.yaml` 文件：
-   ```yaml
-   host: 0.0.0.0
-   port: 1688
-   environment: development
-   log_level: info
-   database_path: ./data/gitlab-merge-alert.db
-   gitlab_url_prefix: https://your-gitlab.com
-   default_webhook_url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=your-key
+   **⚠️ 安全警告**: 请勿将敏感信息提交到版本控制系统！
+   
+   **方法1: 本地配置文件 (推荐)**
+   ```bash
+   # 复制配置模板
+   cp config.example.yaml config.local.yaml
+   
+   # 编辑 config.local.yaml，填入真实的敏感信息
+   vim config.local.yaml
    ```
+   
+   **方法2: 环境变量**
+   ```bash
+   export GMA_GITLAB_URL="https://your-gitlab-server.com"
+   export GMA_DEFAULT_WEBHOOK_URL="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-REAL-KEY"
+   ```
+   
+   **配置说明**:
+   - `config.local.yaml`: 包含敏感信息，仅本地使用 (已在 .gitignore 中)
+   - `config.yaml`: 示例配置，安全可提交
+   - `config.example.yaml`: 配置模板，参考使用
 
 5. **运行应用**
    ```bash

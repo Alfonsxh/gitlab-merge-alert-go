@@ -78,14 +78,38 @@ web/                 # 静态资源和 HTML 模板
 
 ### 配置管理
 
-**配置文件**: `config.yaml`
-**环境变量前缀**: `GMA_` (例如: `GMA_HOST`, `GMA_PORT`)
+**⚠️ 安全注意事项**：
+- **绝不** 将包含敏感信息的配置文件提交到版本控制系统
+- 生产环境必须使用环境变量或本地配置文件
+- 定期轮换API密钥和Webhook密钥
 
-主要配置项:
+**配置文件优先级**:
+1. `config.local.yaml` (本地敏感配置，已在 .gitignore 中)
+2. `config.yaml` (示例配置，安全可提交)  
+3. 环境变量 (前缀: `GMA_`)
+
+**配置方法**:
+
+**方法1: 本地配置文件**
+```bash
+# 复制模板并填入真实值
+cp config.example.yaml config.local.yaml
+# 编辑 config.local.yaml，填入真实的敏感信息
+```
+
+**方法2: 环境变量**
+```bash
+export GMA_GITLAB_URL="https://your-gitlab-server.com"
+export GMA_DEFAULT_WEBHOOK_URL="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-KEY"
+export GMA_GITLAB_PERSONAL_ACCESS_TOKEN="your-gitlab-token"
+```
+
+**主要配置项**:
 - `host/port`: 服务监听地址
 - `database_path`: SQLite 数据库路径
-- `gitlab_url_prefix`: GitLab 服务器地址
-- `default_webhook_url`: 默认企业微信机器人地址
+- `gitlab_url`: GitLab 服务器地址 (**敏感**)
+- `default_webhook_url`: 企业微信机器人地址 (**敏感**)
+- `gitlab_personal_access_token`: GitLab 访问令牌 (**敏感**)
 
 ### 数据库
 
