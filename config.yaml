@@ -1,9 +1,26 @@
+# 配置文件示例 - 请复制config.example.yaml为config.local.yaml来配置真实值
+# 或者使用环境变量来配置敏感信息
+
+# 服务器配置
 host: 0.0.0.0
 port: 1688
 environment: development
 log_level: info
+
+# 数据库配置
 database_path: ./data/gitlab-merge-alert.db
-gitlab_url: https://your-gitlab-server.com
-redirect_server_url: http://localhost:1688
-public_webhook_url: http://localhost:1688
-default_webhook_url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-WEBHOOK-KEY
+
+# GitLab 配置 - 请替换为您的GitLab服务器地址
+gitlab_url: "https://your-gitlab-server.com"
+
+# 服务器URL配置
+redirect_server_url: "http://localhost:1688"
+public_webhook_url: "http://localhost:1688"
+
+# 企业微信机器人配置 - 请替换为您的真实webhook地址
+default_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-WEBHOOK-KEY"
+
+# 注意：
+# 1. 生产环境请使用config.local.yaml或环境变量配置敏感信息
+# 2. 支持的环境变量前缀：GMA_
+# 3. 请勿将真实的密钥和内部服务器地址提交到版本控制系统
