@@ -678,3 +678,53 @@ func (s *GitLabService) FindWebhookByURL(baseURL string, projectID int, webhookU
 
 	return nil, nil // 未找到
 }
+
+// FindAllWebhooksByURL 根据URL查找项目中所有匹配的webhook
+func (s *GitLabService) FindAllWebhooksByURL(baseURL string, projectID int, webhookURL, accessToken string) ([]*GitLabWebhook, error) {
+	webhooks, err := s.ListProjectWebhooks(baseURL, projectID, accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	var matchingWebhooks []*GitLabWebhook
+	for _, webhook := range webhooks {
+		if webhook.URL == webhookURL {
+			matchingWebhooks = append(matchingWebhooks, webhook)
+		}
+	}
+
+	return matchingWebhooks, nil
+}
+
+// DeleteAllWebhooksByURL 删除项目中所有匹配URL的webhook
+func (s *GitLabService) DeleteAllWebhooksByURL(baseURL string, projectID int, webhookURL, accessToken string) (int, error) {
+	// 首先找到所有匹配的webhook
+	matchingWebhooks, err := s.FindAllWebhooksByURL(baseURL, projectID, webhookURL, accessToken)
+	if err != nil {
+		return 0, fmt.Errorf("查找匹配的webhook失败: %v", err)
+	}
+
+	if len(matchingWebhooks) == 0 {
+		return 0, nil // 没有找到匹配的webhook
+	}
+
+	var deletedCount int
+	var errors []string
+
+	// 删除每个匹配的webhook
+	for _, webhook := range matchingWebhooks {
+		err := s.DeleteProjectWebhook(baseURL, projectID, webhook.ID, accessToken)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("删除webhook ID %d 失败: %v", webhook.ID, err))
+		} else {
+			deletedCount++
+		}
+	}
+
+	// 如果有错误，返回部分成功的结果
+	if len(errors) > 0 {
+		return deletedCount, fmt.Errorf("部分删除失败 (%d/%d 成功): %s", deletedCount, len(matchingWebhooks), strings.Join(errors, "; "))
+	}
+
+	return deletedCount, nil
+}

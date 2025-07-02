@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -735,11 +736,6 @@ func (h *Handler) DeleteGitLabWebhook(c *gin.Context) {
 		return
 	}
 
-	if project.GitLabWebhookID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "项目未配置GitLab webhook"})
-		return
-	}
-
 	// 解析GitLab URL以获取基础URL
 	parsed := h.gitlabService.ParseGitLabURL(project.URL)
 	if !parsed.IsValid {
@@ -747,12 +743,29 @@ func (h *Handler) DeleteGitLabWebhook(c *gin.Context) {
 		return
 	}
 
-	// 删除GitLab中的webhook
+	// 构建webhook URL
+	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
+
+	// 删除GitLab中所有匹配的webhook
 	gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
-	err = gitlabService.DeleteProjectWebhook(parsed.BaseURL, project.GitLabProjectID, *project.GitLabWebhookID, project.AccessToken)
+	deletedCount, err := gitlabService.DeleteAllWebhooksByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+
+	var responseMessage string
 	if err != nil {
-		logger.GetLogger().Warnf("删除GitLab webhook失败: %v", err)
-		// 即使删除失败也继续更新本地状态，可能是webhook已经被手动删除
+		logger.GetLogger().Warnf("删除GitLab webhook失败: %v (已删除 %d 个)", err, deletedCount)
+		if deletedCount > 0 {
+			responseMessage = fmt.Sprintf("部分删除成功 (已删除 %d 个webhook)", deletedCount)
+		} else {
+			responseMessage = "删除失败，webhook可能已被手动删除"
+		}
+	} else if deletedCount > 0 {
+		if deletedCount == 1 {
+			responseMessage = "GitLab webhook已删除"
+		} else {
+			responseMessage = fmt.Sprintf("GitLab webhook已删除 (共删除 %d 个重复webhook)", deletedCount)
+		}
+	} else {
+		responseMessage = "未找到匹配的webhook，可能已被删除"
 	}
 
 	// 更新项目状态
@@ -766,7 +779,10 @@ func (h *Handler) DeleteGitLabWebhook(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "GitLab webhook已删除"})
+	c.JSON(http.StatusOK, gin.H{
+		"message":      responseMessage,
+		"deletedCount": deletedCount,
+	})
 }
 
 // GetGitLabWebhookStatus 获取GitLab Webhook状态
@@ -856,7 +872,7 @@ func (h *Handler) autoCreateGitLabWebhook(project *models.Project) {
 	}
 }
 
-// autoDeleteGitLabWebhook 自动删除GitLab webhook
+// autoDeleteGitLabWebhook 自动删除GitLab webhook（支持删除多个重复的webhook）
 func (h *Handler) autoDeleteGitLabWebhook(project *models.Project) {
 	// 解析GitLab URL
 	parsed := h.gitlabService.ParseGitLabURL(project.URL)
@@ -865,13 +881,22 @@ func (h *Handler) autoDeleteGitLabWebhook(project *models.Project) {
 		return
 	}
 
-	// 删除GitLab中的webhook
+	// 构建webhook URL
+	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
+
+	// 删除GitLab中所有匹配的webhook
 	gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
-	err := gitlabService.DeleteProjectWebhook(parsed.BaseURL, project.GitLabProjectID, *project.GitLabWebhookID, project.AccessToken)
+	deletedCount, err := gitlabService.DeleteAllWebhooksByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
 	if err != nil {
-		logger.GetLogger().Warnf("删除项目 %d 的GitLab webhook失败: %v", project.ID, err)
+		logger.GetLogger().Warnf("删除项目 %d 的GitLab webhook失败: %v (已删除 %d 个)", project.ID, err, deletedCount)
 		// 即使删除失败也继续，可能是webhook已经被手动删除
+	} else if deletedCount > 0 {
+		if deletedCount == 1 {
+			logger.GetLogger().Infof("项目 %d 的GitLab webhook已删除", project.ID)
+		} else {
+			logger.GetLogger().Infof("项目 %d 的GitLab webhook已删除 (共删除 %d 个重复webhook)", project.ID, deletedCount)
+		}
 	} else {
-		logger.GetLogger().Infof("项目 %d 的GitLab webhook已删除", project.ID)
+		logger.GetLogger().Infof("项目 %d 未找到匹配的GitLab webhook，可能已被手动删除", project.ID)
 	}
 }
