@@ -441,19 +441,65 @@
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            
-                        </div>
+                        <!-- Webhook配置 -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Webhook配置</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="use_existing_webhook" v-model="singleWebhookConfig.use_existing">
+                                    <label class="form-check-label" for="use_existing_webhook">
+                                        使用现有Webhook
+                                    </label>
+                                </div>
 
-                        <div class="mb-3">
-                            <label for="webhook_id_single" class="form-label">关联Webhook (可选)</label>
-                            <select class="form-select" id="webhook_id_single" v-model="parsedProjectInfo.webhook_id">
-                                <option value="">不关联任何Webhook</option>
-                                <template v-for="webhook in allWebhooks" :key="webhook?.id || Math.random()">
-                                    <option v-if="webhook && webhook.id" :value="webhook.id" v-text="webhook.name + ' - ' + webhook.url"></option>
-                                </template>
-                            </select>
-                            <div class="form-text">选择一个现有的Webhook与此项目关联</div>
+                                <!-- 现有Webhook选择 -->
+                                <div v-if="singleWebhookConfig.use_existing">
+                                    <div class="mb-3">
+                                        <label class="form-label">选择现有Webhook</label>
+                                        <select class="form-select" v-model="singleWebhookConfig.existing_webhook_id">
+                                            <option value="">选择一个现有的Webhook</option>
+                                            <template v-for="webhook in allWebhooks" :key="webhook?.id || Math.random()">
+                                                <option v-if="webhook && webhook.id" :value="webhook.id" v-text="webhook.name + ' - ' + webhook.url">
+                                                </option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- 创建新Webhook -->
+                                <div v-else>
+                                    <div class="text-center my-3">
+                                        <span class="text-muted">-- 创建新的Webhook --</span>
+                                    </div>
+
+                                    <div class="border rounded p-3">
+                                        <h6>新Webhook信息</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">名称 *</label>
+                                            <input type="text" class="form-control" v-model="singleWebhookConfig.new_webhook.name" 
+                                                   placeholder="例如: 开发团队通知群" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Webhook URL *</label>
+                                            <input type="url" class="form-control" v-model="singleWebhookConfig.new_webhook.url" 
+                                                   placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">描述</label>
+                                            <textarea class="form-control" v-model="singleWebhookConfig.new_webhook.description" 
+                                                      rows="2" placeholder="描述这个Webhook的用途"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 不配置Webhook提示 -->
+                                <div v-if="!singleWebhookConfig.use_existing && !singleWebhookConfig.new_webhook.name && !singleWebhookConfig.new_webhook.url" class="alert alert-info mt-3">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    未配置Webhook - 项目将创建但不关联任何Webhook，您可以稍后在项目管理页面配置
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -602,7 +648,7 @@
                         <button type="button" class="btn btn-outline-secondary me-2" @click="urlParseStep = 'input'">
                             返回修改
                         </button>
-                        <button type="button" class="btn btn-primary" @click="saveProject" :disabled="projectSaving">
+                        <button type="button" class="btn btn-primary" @click="saveProject" :disabled="projectSaving || !isValidSingleWebhookConfig">
                             <span v-if="projectSaving" class="spinner-border spinner-border-sm me-2"></span>
                             保存项目
                         </button>
@@ -706,6 +752,18 @@
                     },
                     isBatchMode: false,
                     
+                    // 单个项目的webhook配置
+                    singleWebhookConfig: {
+                        use_existing: false,
+                        existing_webhook_id: null,
+                        new_webhook: {
+                            name: '',
+                            url: '',
+                            description: '',
+                            is_active: true
+                        }
+                    },
+                    
                     // UI状态控制
                     showToken: false,
                     showTokenHelp: false,
@@ -749,6 +807,26 @@
                         if (this.urlParseStep === 'parsing') return '66%';
                         return '100%';
                     }
+                },
+                isValidSingleWebhookConfig() {
+                    // 如果使用现有webhook，验证是否选择了webhook
+                    if (this.singleWebhookConfig.use_existing) {
+                        return true; // 允许不选择现有webhook（项目可以不关联webhook）
+                    }
+                    
+                    // 如果创建新webhook，验证必填字段
+                    if (!this.singleWebhookConfig.use_existing) {
+                        // 如果没有填写任何新webhook信息，允许通过（不关联webhook）
+                        if (!this.singleWebhookConfig.new_webhook.name && !this.singleWebhookConfig.new_webhook.url) {
+                            return true;
+                        }
+                        
+                        // 如果填写了部分信息，必须填写完整
+                        return this.singleWebhookConfig.new_webhook.name && 
+                               this.singleWebhookConfig.new_webhook.url;
+                    }
+                    
+                    return true;
                 }
             },
             methods: {
@@ -855,6 +933,16 @@
                         project_webhooks: []
                     };
                     this.isBatchMode = false;
+                    this.singleWebhookConfig = {
+                        use_existing: false,
+                        existing_webhook_id: null,
+                        new_webhook: {
+                            name: '',
+                            url: '',
+                            description: '',
+                            is_active: true
+                        }
+                    };
                     this.showToken = false;
                     this.showTokenHelp = false;
                     this.urlParsing = false;
@@ -1072,13 +1160,37 @@
                             await axios.put(`/api/v1/projects/${this.currentProject.id}`, payload);
                         } else {
                             // 添加模式：使用解析出的项目信息
+                            let webhookId = null;
+                            
+                            // 处理webhook配置
+                            if (this.singleWebhookConfig.use_existing && this.singleWebhookConfig.existing_webhook_id) {
+                                // 使用现有webhook
+                                webhookId = this.singleWebhookConfig.existing_webhook_id;
+                            } else if (!this.singleWebhookConfig.use_existing && 
+                                       this.singleWebhookConfig.new_webhook.name && 
+                                       this.singleWebhookConfig.new_webhook.url) {
+                                // 创建新webhook
+                                try {
+                                    const webhookResponse = await axios.post('/api/v1/webhooks', {
+                                        name: this.singleWebhookConfig.new_webhook.name,
+                                        url: this.singleWebhookConfig.new_webhook.url,
+                                        description: this.singleWebhookConfig.new_webhook.description,
+                                        is_active: this.singleWebhookConfig.new_webhook.is_active
+                                    });
+                                    webhookId = webhookResponse.data.data.id;
+                                } catch (webhookError) {
+                                    console.error('Failed to create webhook:', webhookError);
+                                    throw new Error('创建Webhook失败: ' + (webhookError.response?.data?.error || webhookError.message));
+                                }
+                            }
+                            
                             const projectData = {
                                 gitlab_project_id: this.parsedProjectInfo.gitlab_project_id,
                                 name: this.parsedProjectInfo.name,
                                 url: this.parsedProjectInfo.web_url,
                                 description: this.parsedProjectInfo.description || '',
                                 access_token: this.urlParseForm.access_token,
-                                webhook_id: this.parsedProjectInfo.webhook_id || null
+                                webhook_id: webhookId
                             };
                             
                             await axios.post('/api/v1/projects', projectData);
