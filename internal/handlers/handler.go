@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"gitlab-merge-alert-go/internal/config"
+	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/services"
 	"gitlab-merge-alert-go/pkg/logger"
 
@@ -14,10 +15,10 @@ import (
 type Handler struct {
 	db            *gorm.DB
 	config        *config.Config
-	gitlabService *services.GitLabService
-	wechatService *services.WeChatService
-	notifyService *services.NotificationService
-	response      *ResponseHelper
+	gitlabService services.GitLabService
+	wechatService services.WeChatService
+	notifyService services.NotificationService
+	response      *middleware.ResponseHelper
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Handler {
@@ -31,7 +32,7 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 		gitlabService: gitlabService,
 		wechatService: wechatService,
 		notifyService: notifyService,
-		response:      NewResponseHelper(),
+		response:      middleware.NewResponseHelper(),
 	}
 }
 

@@ -10,19 +10,19 @@ import (
 	"gorm.io/gorm"
 )
 
-type NotificationService struct {
+type notificationService struct {
 	db            *gorm.DB
-	wechatService *WeChatService
+	wechatService WeChatService
 }
 
-func NewNotificationService(db *gorm.DB, wechatService *WeChatService) *NotificationService {
-	return &NotificationService{
+func NewNotificationService(db *gorm.DB, wechatService WeChatService) NotificationService {
+	return &notificationService{
 		db:            db,
 		wechatService: wechatService,
 	}
 }
 
-func (s *NotificationService) ProcessMergeRequest(webhookData *models.GitLabWebhookData) error {
+func (s *notificationService) ProcessMergeRequest(webhookData *models.GitLabWebhookData) error {
 	// 只处理打开状态的合并请求
 	if webhookData.ObjectAttributes.State != "opened" {
 		return nil
@@ -83,7 +83,7 @@ func (s *NotificationService) ProcessMergeRequest(webhookData *models.GitLabWebh
 	return nil
 }
 
-func (s *NotificationService) sendNotifications(project *models.Project, webhookData *models.GitLabWebhookData, assigneeInfo []models.AssigneeInfo) error {
+func (s *notificationService) sendNotifications(project *models.Project, webhookData *models.GitLabWebhookData, assigneeInfo []models.AssigneeInfo) error {
 	logger.GetLogger().Infof("开始处理通知发送 - 项目: %s", project.Name)
 
 	// 记录从 webhook 获取的指派人信息
@@ -206,4 +206,144 @@ func (s *NotificationService) sendNotifications(project *models.Project, webhook
 	}
 
 	return nil
+}
+
+// GetAllNotifications 获取所有通知
+func (s *notificationService) GetAllNotifications() ([]models.NotificationResponse, error) {
+	var notifications []models.Notification
+	if err := s.db.Preload("Project").Find(&notifications).Error; err != nil {
+		return nil, fmt.Errorf("failed to get notifications: %v", err)
+	}
+
+	var responses []models.NotificationResponse
+	for _, notification := range notifications {
+		// 解析邮箱数组
+		var assigneeEmails []string
+		if notification.AssigneeEmails != "" {
+			json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails)
+		}
+
+		responses = append(responses, models.NotificationResponse{
+			ID:               notification.ID,
+			ProjectID:        notification.ProjectID,
+			ProjectName:      notification.Project.Name,
+			MergeRequestID:   notification.MergeRequestID,
+			Title:            notification.Title,
+			SourceBranch:     notification.SourceBranch,
+			TargetBranch:     notification.TargetBranch,
+			AuthorEmail:      notification.AuthorEmail,
+			AssigneeEmails:   assigneeEmails,
+			Status:           notification.Status,
+			NotificationSent: notification.NotificationSent,
+			ErrorMessage:     notification.ErrorMessage,
+			CreatedAt:        notification.CreatedAt,
+		})
+	}
+
+	return responses, nil
+}
+
+// GetNotificationsByProjectID 根据项目ID获取通知
+func (s *notificationService) GetNotificationsByProjectID(projectID uint) ([]models.NotificationResponse, error) {
+	var notifications []models.Notification
+	if err := s.db.Where("project_id = ?", projectID).Preload("Project").Find(&notifications).Error; err != nil {
+		return nil, fmt.Errorf("failed to get notifications: %v", err)
+	}
+
+	var responses []models.NotificationResponse
+	for _, notification := range notifications {
+		// 解析邮箱数组
+		var assigneeEmails []string
+		if notification.AssigneeEmails != "" {
+			json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails)
+		}
+
+		responses = append(responses, models.NotificationResponse{
+			ID:               notification.ID,
+			ProjectID:        notification.ProjectID,
+			ProjectName:      notification.Project.Name,
+			MergeRequestID:   notification.MergeRequestID,
+			Title:            notification.Title,
+			SourceBranch:     notification.SourceBranch,
+			TargetBranch:     notification.TargetBranch,
+			AuthorEmail:      notification.AuthorEmail,
+			AssigneeEmails:   assigneeEmails,
+			Status:           notification.Status,
+			NotificationSent: notification.NotificationSent,
+			ErrorMessage:     notification.ErrorMessage,
+			CreatedAt:        notification.CreatedAt,
+		})
+	}
+
+	return responses, nil
+}
+
+// GetRecentNotifications 获取最近的通知
+func (s *notificationService) GetRecentNotifications(limit int) ([]models.NotificationResponse, error) {
+	var notifications []models.Notification
+	if err := s.db.Preload("Project").Order("created_at desc").Limit(limit).Find(&notifications).Error; err != nil {
+		return nil, fmt.Errorf("failed to get recent notifications: %v", err)
+	}
+
+	var responses []models.NotificationResponse
+	for _, notification := range notifications {
+		// 解析邮箱数组
+		var assigneeEmails []string
+		if notification.AssigneeEmails != "" {
+			json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails)
+		}
+
+		responses = append(responses, models.NotificationResponse{
+			ID:               notification.ID,
+			ProjectID:        notification.ProjectID,
+			ProjectName:      notification.Project.Name,
+			MergeRequestID:   notification.MergeRequestID,
+			Title:            notification.Title,
+			SourceBranch:     notification.SourceBranch,
+			TargetBranch:     notification.TargetBranch,
+			AuthorEmail:      notification.AuthorEmail,
+			AssigneeEmails:   assigneeEmails,
+			Status:           notification.Status,
+			NotificationSent: notification.NotificationSent,
+			ErrorMessage:     notification.ErrorMessage,
+			CreatedAt:        notification.CreatedAt,
+		})
+	}
+
+	return responses, nil
+}
+
+// GetNotificationStats 获取通知统计信息
+func (s *notificationService) GetNotificationStats() (map[string]interface{}, error) {
+	stats := make(map[string]interface{})
+
+	// 总通知数
+	var totalCount int64
+	if err := s.db.Model(&models.Notification{}).Count(&totalCount).Error; err != nil {
+		return nil, fmt.Errorf("failed to get total count: %v", err)
+	}
+	stats["total_notifications"] = totalCount
+
+	// 成功发送的通知数
+	var successCount int64
+	if err := s.db.Model(&models.Notification{}).Where("notification_sent = ?", true).Count(&successCount).Error; err != nil {
+		return nil, fmt.Errorf("failed to get success count: %v", err)
+	}
+	stats["success_notifications"] = successCount
+
+	// 失败的通知数
+	var failureCount int64
+	if err := s.db.Model(&models.Notification{}).Where("notification_sent = ?", false).Count(&failureCount).Error; err != nil {
+		return nil, fmt.Errorf("failed to get failure count: %v", err)
+	}
+	stats["failure_notifications"] = failureCount
+
+	// 今天的通知数
+	var todayCount int64
+	if err := s.db.Model(&models.Notification{}).Where("DATE(created_at) = CURRENT_DATE").Count(&todayCount).Error; err != nil {
+		return nil, fmt.Errorf("failed to get today count: %v", err)
+	}
+	stats["today_notifications"] = todayCount
+
+	return stats, nil
 }

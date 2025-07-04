@@ -10,12 +10,12 @@ import (
 	"gitlab-merge-alert-go/pkg/logger"
 )
 
-type WeChatService struct {
+type weChatService struct {
 	client *http.Client
 }
 
-func NewWeChatService() *WeChatService {
-	return &WeChatService{
+func NewWeChatService() WeChatService {
+	return &weChatService{
 		client: &http.Client{},
 	}
 }
@@ -28,7 +28,7 @@ type WeChatMessage struct {
 	} `json:"text"`
 }
 
-func (s *WeChatService) SendMessage(webhookURL, content string, mentionedMobiles []string) error {
+func (s *weChatService) SendMessage(webhookURL, content string, mentionedMobiles []string) error {
 	logger.GetLogger().Infof("准备发送企业微信消息到: %s", webhookURL)
 	logger.GetLogger().Infof("消息内容: %s", content)
 	logger.GetLogger().Infof("需要@的手机号列表: %v", mentionedMobiles)
@@ -66,7 +66,7 @@ func (s *WeChatService) SendMessage(webhookURL, content string, mentionedMobiles
 	return nil
 }
 
-func (s *WeChatService) FormatMergeRequestMessage(projectName, sourceBranch, targetBranch, mergeFrom, mergeTitle, clickURL string, mergeToList []string) string {
+func (s *weChatService) FormatMergeRequestMessage(projectName, sourceBranch, targetBranch, mergeFrom, mergeTitle, clickURL string, mergeToList []string) string {
 	content := fmt.Sprintf("%s\nProject: %s\nFrom: %s(%s)\nTo: %s\nMerge Info -> %s\nClick -> %s",
 		strings.Repeat("=", 32)+" Merge Request "+strings.Repeat("=", 32),
 		projectName,

@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-type GitLabService struct {
+type gitLabService struct {
 	baseURL     string
 	accessToken string
 	client      *http.Client
 }
 
-func NewGitLabService(baseURL, accessToken string) *GitLabService {
-	return &GitLabService{
+func NewGitLabService(baseURL, accessToken string) GitLabService {
+	return &gitLabService{
 		baseURL:     baseURL,
 		accessToken: accessToken,
 		client:      &http.Client{Timeout: 30 * time.Second},
@@ -94,7 +94,7 @@ type CreateWebhookRequest struct {
 }
 
 // ParseGitLabURL 解析GitLab项目URL，提取基础URL和项目路径
-func (s *GitLabService) ParseGitLabURL(projectURL string) *ParsedGitLabURL {
+func (s *gitLabService) ParseGitLabURL(projectURL string) *ParsedGitLabURL {
 	result := &ParsedGitLabURL{}
 
 	// 清理URL，移除末尾的斜杠和可能的片段
@@ -182,7 +182,7 @@ func (s *GitLabService) ParseGitLabURL(projectURL string) *ParsedGitLabURL {
 }
 
 // GetProjectByURL 通过URL和token获取项目信息
-func (s *GitLabService) GetProjectByURL(projectURL, accessToken string) (*GitLabProjectInfo, error) {
+func (s *gitLabService) GetProjectByURL(projectURL, accessToken string) (*GitLabProjectInfo, error) {
 	// 解析URL
 	parsed := s.ParseGitLabURL(projectURL)
 	if !parsed.IsValid {
@@ -194,7 +194,7 @@ func (s *GitLabService) GetProjectByURL(projectURL, accessToken string) (*GitLab
 }
 
 // GetProjectByPath 通过路径获取项目信息
-func (s *GitLabService) GetProjectByPath(baseURL, projectPath, accessToken string) (*GitLabProjectInfo, error) {
+func (s *gitLabService) GetProjectByPath(baseURL, projectPath, accessToken string) (*GitLabProjectInfo, error) {
 	// URL编码项目路径
 	encodedPath := url.QueryEscape(projectPath)
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%s", baseURL, encodedPath)
@@ -248,7 +248,7 @@ func (s *GitLabService) GetProjectByPath(baseURL, projectPath, accessToken strin
 
 // GetProject 通过项目ID获取项目信息（保持原有兼容性）
 // 接受一个可选的accessToken参数，如果提供，则优先使用该token进行认证
-func (s *GitLabService) GetProject(projectID int, accessToken ...string) (*GitLabProjectInfo, error) {
+func (s *gitLabService) GetProject(projectID int, accessToken ...string) (*GitLabProjectInfo, error) {
 	token := s.accessToken
 	if len(accessToken) > 0 && accessToken[0] != "" {
 		token = accessToken[0]
@@ -257,7 +257,7 @@ func (s *GitLabService) GetProject(projectID int, accessToken ...string) (*GitLa
 }
 
 // TestConnection 测试GitLab连接和token有效性
-func (s *GitLabService) TestConnection(baseURL, accessToken string) error {
+func (s *gitLabService) TestConnection(baseURL, accessToken string) error {
 	apiURL := fmt.Sprintf("%s/api/v4/user", baseURL)
 
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -294,7 +294,7 @@ func (s *GitLabService) TestConnection(baseURL, accessToken string) error {
 }
 
 // GetGroupProjects 获取组下所有项目（包括子组项目）
-func (s *GitLabService) GetGroupProjects(baseURL, groupPath, accessToken string) ([]*GitLabProjectInfo, error) {
+func (s *gitLabService) GetGroupProjects(baseURL, groupPath, accessToken string) ([]*GitLabProjectInfo, error) {
 	var allProjects []*GitLabProjectInfo
 
 	// 获取组直接下的项目
@@ -324,7 +324,7 @@ func (s *GitLabService) GetGroupProjects(baseURL, groupPath, accessToken string)
 }
 
 // getGroupDirectProjects 获取组直接下的项目
-func (s *GitLabService) getGroupDirectProjects(baseURL, groupPath, accessToken string) ([]*GitLabProjectInfo, error) {
+func (s *gitLabService) getGroupDirectProjects(baseURL, groupPath, accessToken string) ([]*GitLabProjectInfo, error) {
 	encodedPath := url.QueryEscape(groupPath)
 	apiURL := fmt.Sprintf("%s/api/v4/groups/%s/projects", baseURL, encodedPath)
 
@@ -393,7 +393,7 @@ func (s *GitLabService) getGroupDirectProjects(baseURL, groupPath, accessToken s
 }
 
 // getSubgroups 获取子组
-func (s *GitLabService) getSubgroups(baseURL, groupPath, accessToken string) ([]*GitLabGroupInfo, error) {
+func (s *gitLabService) getSubgroups(baseURL, groupPath, accessToken string) ([]*GitLabGroupInfo, error) {
 	encodedPath := url.QueryEscape(groupPath)
 	apiURL := fmt.Sprintf("%s/api/v4/groups/%s/subgroups", baseURL, encodedPath)
 
@@ -438,7 +438,7 @@ func (s *GitLabService) getSubgroups(baseURL, groupPath, accessToken string) ([]
 }
 
 // GetGroupByPath 获取组信息
-func (s *GitLabService) GetGroupByPath(baseURL, groupPath, accessToken string) (*GitLabGroupInfo, error) {
+func (s *gitLabService) GetGroupByPath(baseURL, groupPath, accessToken string) (*GitLabGroupInfo, error) {
 	encodedPath := url.QueryEscape(groupPath)
 	apiURL := fmt.Sprintf("%s/api/v4/groups/%s", baseURL, encodedPath)
 
@@ -487,7 +487,7 @@ func (s *GitLabService) GetGroupByPath(baseURL, groupPath, accessToken string) (
 }
 
 // ValidateProjectURL 验证项目URL并返回项目ID（保持向后兼容性）
-func (s *GitLabService) ValidateProjectURL(projectURL string) (int, error) {
+func (s *gitLabService) ValidateProjectURL(projectURL string) (int, error) {
 	parsed := s.ParseGitLabURL(projectURL)
 	if !parsed.IsValid {
 		return 0, fmt.Errorf(parsed.Error)
@@ -502,7 +502,7 @@ func (s *GitLabService) ValidateProjectURL(projectURL string) (int, error) {
 }
 
 // CreateProjectWebhook 在GitLab项目中创建webhook
-func (s *GitLabService) CreateProjectWebhook(baseURL string, projectID int, webhookURL, accessToken string) (*GitLabWebhook, error) {
+func (s *gitLabService) CreateProjectWebhook(baseURL string, projectID int, webhookURL, accessToken string) (*GitLabWebhook, error) {
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/hooks", baseURL, projectID)
 
 	webhookRequest := CreateWebhookRequest{
@@ -565,7 +565,7 @@ func (s *GitLabService) CreateProjectWebhook(baseURL string, projectID int, webh
 }
 
 // ListProjectWebhooks 获取项目的所有webhooks
-func (s *GitLabService) ListProjectWebhooks(baseURL string, projectID int, accessToken string) ([]*GitLabWebhook, error) {
+func (s *gitLabService) ListProjectWebhooks(baseURL string, projectID int, accessToken string) ([]*GitLabWebhook, error) {
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/hooks", baseURL, projectID)
 
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -618,7 +618,7 @@ func (s *GitLabService) ListProjectWebhooks(baseURL string, projectID int, acces
 }
 
 // DeleteProjectWebhook 删除项目webhook
-func (s *GitLabService) DeleteProjectWebhook(baseURL string, projectID, webhookID int, accessToken string) error {
+func (s *gitLabService) DeleteProjectWebhook(baseURL string, projectID, webhookID int, accessToken string) error {
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/hooks/%d", baseURL, projectID, webhookID)
 
 	req, err := http.NewRequest("DELETE", apiURL, nil)
@@ -659,12 +659,12 @@ func (s *GitLabService) DeleteProjectWebhook(baseURL string, projectID, webhookI
 }
 
 // BuildWebhookURL 构建本服务的webhook接收URL
-func (s *GitLabService) BuildWebhookURL(publicBaseURL string) string {
+func (s *gitLabService) BuildWebhookURL(publicBaseURL string) string {
 	return fmt.Sprintf("%s/api/v1/webhook/gitlab", strings.TrimSuffix(publicBaseURL, "/"))
 }
 
 // FindWebhookByURL 根据URL查找项目中的webhook
-func (s *GitLabService) FindWebhookByURL(baseURL string, projectID int, webhookURL, accessToken string) (*GitLabWebhook, error) {
+func (s *gitLabService) FindWebhookByURL(baseURL string, projectID int, webhookURL, accessToken string) (*GitLabWebhook, error) {
 	webhooks, err := s.ListProjectWebhooks(baseURL, projectID, accessToken)
 	if err != nil {
 		return nil, err
@@ -680,7 +680,7 @@ func (s *GitLabService) FindWebhookByURL(baseURL string, projectID int, webhookU
 }
 
 // FindAllWebhooksByURL 根据URL查找项目中所有匹配的webhook
-func (s *GitLabService) FindAllWebhooksByURL(baseURL string, projectID int, webhookURL, accessToken string) ([]*GitLabWebhook, error) {
+func (s *gitLabService) FindAllWebhooksByURL(baseURL string, projectID int, webhookURL, accessToken string) ([]*GitLabWebhook, error) {
 	webhooks, err := s.ListProjectWebhooks(baseURL, projectID, accessToken)
 	if err != nil {
 		return nil, err
@@ -697,7 +697,7 @@ func (s *GitLabService) FindAllWebhooksByURL(baseURL string, projectID int, webh
 }
 
 // DeleteAllWebhooksByURL 删除项目中所有匹配URL的webhook
-func (s *GitLabService) DeleteAllWebhooksByURL(baseURL string, projectID int, webhookURL, accessToken string) (int, error) {
+func (s *gitLabService) DeleteAllWebhooksByURL(baseURL string, projectID int, webhookURL, accessToken string) (int, error) {
 	// 首先找到所有匹配的webhook
 	matchingWebhooks, err := s.FindAllWebhooksByURL(baseURL, projectID, webhookURL, accessToken)
 	if err != nil {
