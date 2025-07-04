@@ -52,6 +52,153 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+        
+        /* 表格优化样式 */
+        .table th {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        
+        .table .text-truncate {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .table .text-truncate-long {
+            max-width: 300px;
+            overflow: visible;
+            white-space: normal;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+        
+        .table td.no-wrap {
+            white-space: nowrap;
+        }
+        
+        .table .phone-privacy {
+            font-family: monospace;
+        }
+        
+        /* 分组显示样式 */
+        .group-section {
+            margin-bottom: 2rem;
+        }
+        
+        .group-header {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem 0.375rem 0 0;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .group-header:hover {
+            background: linear-gradient(135deg, #5a6268 0%, #3d4147 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .group-header.collapsed {
+            border-radius: 0.375rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .group-content {
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 0.375rem 0.375rem;
+        }
+        
+        .group-badge {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-radius: 50px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            margin-left: 0.5rem;
+        }
+        
+        /* 表格布局优化 */
+        .table {
+            table-layout: fixed;
+        }
+        
+        /* 项目名称列宽优化 */
+        .project-name-col {
+            width: 200px;
+            min-width: 200px;
+            max-width: 200px;
+        }
+        
+        .project-name-col a {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        /* 各列宽度设置 */
+        .table th:nth-child(1) { width: 60px; }   /* ID */
+        .table th:nth-child(2) { width: 200px; }  /* 项目名称 */
+        .table th:nth-child(3) { width: 100px; }  /* GitLab项目ID */
+        .table th:nth-child(4) { width: 200px; }  /* 描述 */
+        .table th:nth-child(5) { width: 120px; }  /* GitLab Webhook */
+        .table th:nth-child(6) { width: 180px; }  /* 关联Webhook */
+        .table th:nth-child(7) { width: 120px; }  /* 创建时间 */
+        .table th:nth-child(8) { width: 120px; }  /* 操作 */
+        
+        /* 自定义Tooltip样式 */
+        .tooltip {
+            font-size: 0.875rem;
+        }
+        
+        .tooltip-inner {
+            background: linear-gradient(135deg, #495057 0%, #343a40 100%);
+            color: white;
+            border-radius: 0.375rem;
+            padding: 8px 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: none;
+            font-weight: 500;
+            letter-spacing: 0.025em;
+            max-width: 400px;
+            width: auto;
+            white-space: normal;
+            word-wrap: break-word;
+            text-align: left;
+            display: inline-block;
+        }
+        
+        .tooltip.bs-tooltip-top .tooltip-arrow::before {
+            border-top-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-bottom .tooltip-arrow::before {
+            border-bottom-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-start .tooltip-arrow::before {
+            border-left-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-end .tooltip-arrow::before {
+            border-right-color: #495057;
+        }
+        
+        /* 按钮hover时tooltip预览效果增强 */
+        .btn:hover {
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+        }
     </style>
 </head>
 <body>
@@ -101,78 +248,105 @@
     </div>
 
     <!-- 项目列表 -->
-    <div class="card">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>项目名称</th>
-                            <th>GitLab项目ID</th>
-                            <th>描述</th>
-                            <th>GitLab Webhook</th>
-                            <th>关联Webhook</th>
-                            <th>创建时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="project in projects" :key="project.id">
-                            <td v-text="project.id">-</td>
-                            <td>
-                                <a :href="project.url" target="_blank" class="text-decoration-none">
-                                    <span v-text="project.name">-</span>
-                                    <i class="bi bi-box-arrow-up-right ms-1"></i>
-                                </a>
-                            </td>
-                            <td v-text="project.gitlab_project_id">-</td>
-                            <td v-text="project.description || '-'">-</td>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <span v-if="project.webhook_synced" class="badge bg-success me-2">
-                                        <i class="bi bi-check-circle me-1"></i>已同步
-                                    </span>
-                                    <span v-else class="badge bg-warning me-2">
-                                        <i class="bi bi-exclamation-triangle me-1"></i>未同步
-                                    </span>
-                                    <button v-if="project.auto_manage_webhook" 
-                                            class="btn btn-sm btn-outline-primary" 
-                                            @click="syncGitLabWebhook(project)"
-                                            :disabled="syncingWebhook === project.id">
-                                        <i class="bi bi-arrow-repeat" :class="{'spin': syncingWebhook === project.id}"></i>
-                                    </button>
-                                </div>
-                            </td>
-                            <td>
-                                <span v-for="webhook in project.webhooks" :key="webhook.id" class="badge bg-secondary me-1" v-text="webhook.name">-</span>
-                                <span v-if="!project.webhooks || project.webhooks.length === 0" class="text-muted">无</span>
-                            </td>
-                            <td v-text="formatDate(project.created_at)">-</td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-success me-1" @click="manageWebhooks(project)">
-                                    <i class="bi bi-link"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-primary me-1" @click="editProject(project)">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" @click="deleteProject(project.id)">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        <tr v-if="projects.length === 0">
-                            <td colspan="8" class="text-center py-4">
-                                <div class="text-muted">
-                                    <i class="bi bi-folder-x fs-1 mb-3 d-block"></i>
-                                    <p class="mb-2">还没有添加任何项目</p>
-                                    <p class="small">点击上方的"添加项目"按钮开始添加项目</p>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+    <div v-if="projects.length === 0" class="card">
+        <div class="card-body text-center py-5">
+            <div class="text-muted">
+                <i class="bi bi-folder-x fs-1 mb-3 d-block"></i>
+                <p class="mb-2">还没有添加任何项目</p>
+                <p class="small">点击上方的"添加项目"按钮开始添加项目</p>
             </div>
+        </div>
+    </div>
+
+    <!-- 简化的项目列表显示用于调试 -->
+    <div v-else class="projects-simple">
+        <div class="alert alert-info">
+            找到 <span v-text="projects.length"></span> 个项目，分组数量：<span v-text="Object.keys(groupedProjects).length"></span>
+        </div>
+        
+        <!-- 按组分组显示项目 -->
+        <div class="projects-grouped">
+        <div v-for="(groupProjects, groupName) in groupedProjects" :key="groupName" class="group-section">
+            <button class="group-header w-100 text-start" :class="{ collapsed: collapsedGroups[groupName] }" @click="toggleGroup(groupName)">
+                <div class="d-flex align-items-center">
+                    <i class="bi" :class="collapsedGroups[groupName] ? 'bi-chevron-right' : 'bi-chevron-down'" style="width: 1rem;"></i>
+                    <span class="ms-2 fw-bold" v-text="groupName"></span>
+                    <span class="group-badge" v-text="groupProjects.length + ' 个项目'"></span>
+                </div>
+                <small class="opacity-75">点击展开/收起</small>
+            </button>
+            
+            <div v-show="!collapsedGroups[groupName]" class="group-content">
+                <div class="overflow-hidden">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th class="project-name-col">项目名称</th>
+                                <th>GitLab项目ID</th>
+                                <th>描述</th>
+                                <th>GitLab Webhook</th>
+                                <th>关联Webhook</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="project in groupProjects" :key="project.id">
+                                <td class="no-wrap" v-text="project.id">-</td>
+                                <td class="project-name-col">
+                                    <a :href="project.url" target="_blank" class="text-decoration-none" :title="project.name">
+                                        <span v-text="project.name">-</span>
+                                        <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                    </a>
+                                </td>
+                                <td class="no-wrap" v-text="project.gitlab_project_id">-</td>
+                                <td>
+                                    <span data-bs-toggle="tooltip" :title="project.description || '-'" 
+                                          class="text-truncate d-inline-block" style="max-width: 200px;"
+                                          v-text="project.description || '-'">-</span>
+                                </td>
+                                <td class="no-wrap">
+                                    <div class="d-flex align-items-center">
+                                        <span v-if="project.webhook_synced" class="badge bg-success me-2">
+                                            <i class="bi bi-check-circle me-1"></i>已同步
+                                        </span>
+                                        <span v-else class="badge bg-warning me-2">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>未同步
+                                        </span>
+                                        <button v-if="project.auto_manage_webhook" 
+                                                class="btn btn-sm btn-outline-primary" 
+                                                @click="syncGitLabWebhook(project)"
+                                                :disabled="syncingWebhook === project.id"
+                                                data-bs-toggle="tooltip" title="同步GitLab Webhook">
+                                            <i class="bi bi-arrow-repeat" :class="{'spin': syncingWebhook === project.id}"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="text-truncate-long" :title="getWebhooksText(project.webhooks)">
+                                        <span v-for="webhook in project.webhooks" :key="webhook.id" class="badge bg-secondary me-1" v-text="webhook.name">-</span>
+                                        <span v-if="!project.webhooks || project.webhooks.length === 0" class="text-muted">无</span>
+                                    </div>
+                                </td>
+                                <td class="no-wrap" v-text="formatDate(project.created_at)">-</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-success me-1" @click="manageWebhooks(project)" data-bs-toggle="tooltip" title="管理Webhook关联">
+                                        <i class="bi bi-link"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary me-1" @click="editProject(project)" data-bs-toggle="tooltip" title="编辑项目">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" @click="deleteProject(project.id)" data-bs-toggle="tooltip" title="删除项目">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
         </div>
     </div>
 
@@ -772,7 +946,8 @@
                     projectSaving: false,
                     syncingWebhook: null, // 当前正在同步webhook的项目ID
                     connectionTestResult: null,
-                    gitlabConfig: null
+                    gitlabConfig: null,
+                    collapsedGroups: {}
                 }
             },
             computed: {
@@ -827,6 +1002,10 @@
                     }
                     
                     return true;
+                },
+                groupedProjects() {
+                    // 智能分组：找到最小的有意义的分组级别
+                    return this.createSmartGroups(this.projects);
                 }
             },
             methods: {
@@ -1279,12 +1458,157 @@
                 },
                 formatDate(dateString) {
                     return new Date(dateString).toLocaleString('zh-CN');
+                },
+                getWebhooksText(webhooks) {
+                    if (!webhooks || webhooks.length === 0) return '无';
+                    return webhooks.map(w => w.name).join(', ');
+                },
+                extractGroupFromProject(project) {
+                    // 从项目URL中提取完整路径，用于智能分组
+                    if (!project.url) return ['未分组'];
+                    
+                    try {
+                        const url = new URL(project.url);
+                        const pathParts = url.pathname.split('/').filter(p => p);
+                        
+                        if (pathParts.length >= 2) {
+                            // 返回除了最后一个项目名的所有路径部分
+                            return pathParts.slice(0, -1);
+                        }
+                    } catch (e) {
+                        console.warn('解析项目URL失败:', project.url, e);
+                    }
+                    
+                    return ['未分组'];
+                },
+                createSmartGroups(projects) {
+                    if (!projects || projects.length === 0) return {};
+                    
+                    // 最大组大小阈值
+                    const MAX_GROUP_SIZE = 10;
+                    
+                    // 构建路径树和项目映射
+                    const pathTree = {};
+                    const projectsByPath = {};
+                    
+                    projects.forEach(project => {
+                        const pathParts = this.extractGroupFromProject(project);
+                        
+                        // 为这个项目的每个可能的分组级别添加项目
+                        for (let depth = 1; depth <= pathParts.length; depth++) {
+                            const pathKey = pathParts.slice(0, depth).join('/');
+                            
+                            if (!projectsByPath[pathKey]) {
+                                projectsByPath[pathKey] = [];
+                            }
+                            projectsByPath[pathKey].push(project);
+                            
+                            // 构建树结构用于层级关系
+                            let currentNode = pathTree;
+                            for (let i = 0; i < depth; i++) {
+                                const part = pathParts[i];
+                                if (!currentNode[part]) {
+                                    currentNode[part] = {};
+                                }
+                                currentNode = currentNode[part];
+                            }
+                        }
+                    });
+                    
+                    // 选择最佳的分组级别
+                    const optimalGroups = {};
+                    const processedProjects = new Set();
+                    
+                    // 按路径长度从短到长排序，优先处理顶级分组
+                    const sortedPaths = Object.keys(projectsByPath).sort((a, b) => {
+                        const aDepth = a.split('/').length;
+                        const bDepth = b.split('/').length;
+                        if (aDepth !== bDepth) return aDepth - bDepth;
+                        return a.localeCompare(b);
+                    });
+                    
+                    sortedPaths.forEach(pathKey => {
+                        const groupProjects = projectsByPath[pathKey];
+                        
+                        // 检查这个路径的项目是否已经被更细分的组处理了
+                        const unprocessedProjects = groupProjects.filter(p => !processedProjects.has(p.id));
+                        
+                        if (unprocessedProjects.length === 0) return;
+                        
+                        // 如果这个组的项目数量合适，或者是最深层级，就使用这个分组
+                        const isDeepestLevel = !this.hasSubGroups(pathKey, sortedPaths);
+                        
+                        if (unprocessedProjects.length <= MAX_GROUP_SIZE || isDeepestLevel) {
+                            // 使用这个分组级别
+                            const displayName = this.formatGroupName(pathKey);
+                            optimalGroups[displayName] = unprocessedProjects.sort((a, b) => a.name.localeCompare(b.name));
+                            
+                            // 标记这些项目已被处理
+                            unprocessedProjects.forEach(p => processedProjects.add(p.id));
+                        }
+                    });
+                    
+                    return optimalGroups;
+                },
+                hasSubGroups(pathKey, allPaths) {
+                    // 检查是否有子组（更深层级的路径）包含这个路径的项目
+                    return allPaths.some(otherPath => 
+                        otherPath !== pathKey && 
+                        otherPath.startsWith(pathKey + '/') &&
+                        otherPath.split('/').length === pathKey.split('/').length + 1
+                    );
+                },
+                formatGroupName(pathKey) {
+                    // 格式化组名显示
+                    const parts = pathKey.split('/');
+                    
+                    if (parts.length === 1) {
+                        return parts[0];
+                    } else if (parts.length === 2) {
+                        return `${parts[0]} / ${parts[1]}`;
+                    } else {
+                        // 对于很深的路径，显示最后两级
+                        return `...${parts[parts.length - 2]} / ${parts[parts.length - 1]}`;
+                    }
+                },
+                toggleGroup(groupName) {
+                    // 切换组的展开/收起状态
+                    this.collapsedGroups[groupName] = !this.collapsedGroups[groupName];
+                    // 强制Vue响应式更新
+                    this.$forceUpdate();
+                },
+                initTooltips() {
+                    // 销毁旧的tooltip实例
+                    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                        const existingTooltip = bootstrap.Tooltip.getInstance(el);
+                        if (existingTooltip) {
+                            existingTooltip.dispose();
+                        }
+                    });
+                    
+                    // 创建新的tooltip实例
+                    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                    tooltipTriggerList.map(function (tooltipTriggerEl) {
+                        return new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
                 }
             },
             mounted() {
                 this.loadProjects();
                 this.loadGitLabConfig();
                 this.loadWebhooks();
+                
+                // 初始化tooltips
+                this.$nextTick(() => {
+                    this.initTooltips();
+                });
+            },
+            
+            updated() {
+                // 在数据更新后重新初始化tooltips
+                this.$nextTick(() => {
+                    this.initTooltips();
+                });
             }
         }).mount('#app');
     </script>

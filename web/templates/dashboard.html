@@ -42,6 +42,63 @@
         .navbar-nav .nav-link.active {
             color: rgba(0,0,0,.9);
         }
+        
+        /* 分组显示样式 */
+        .project-group {
+            margin-bottom: 1rem;
+        }
+        
+        .project-group-header {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem 0.375rem 0 0;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .project-group-header:hover {
+            background: linear-gradient(135deg, #5a6268 0%, #3d4147 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .project-group-header.collapsed {
+            border-radius: 0.375rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .project-group-content {
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 0.375rem 0.375rem;
+        }
+        
+        .project-badge {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-radius: 50px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            margin-left: 0.5rem;
+        }
+        
+        /* 表格布局优化 */
+        .table {
+            table-layout: fixed;
+        }
+        
+        /* 各列宽度设置 */
+        .table th:nth-child(1) { width: 250px; }  /* MR标题 */
+        .table th:nth-child(2) { width: 150px; }  /* 分支 */
+        .table th:nth-child(3) { width: 100px; }  /* 提交者 */
+        .table th:nth-child(4) { width: 150px; }  /* 指派人 */
+        .table th:nth-child(5) { width: 80px; }   /* 状态 */
+        .table th:nth-child(6) { width: 120px; }  /* 时间 */
     </style>
 </head>
 <body>
@@ -159,36 +216,91 @@
                                     <h5 class="mb-0">最近通知记录</h5>
                                 </div>
                                 <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-hover">
-                                            <thead>
-                                                <tr>
-                                                    <th>项目</th>
-                                                    <th>标题</th>
-                                                    <th>分支</th>
-                                                    <th>作者</th>
-                                                    <th>状态</th>
-                                                    <th>时间</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr v-for="notification in notifications" :key="notification.id">
-                                                    <td v-text="notification.project_name">-</td>
-                                                    <td v-text="notification.title">-</td>
-                                                    <td>
-                                                        <span class="badge bg-secondary" v-text="notification.source_branch">-</span>
-                                                        <i class="bi bi-arrow-right mx-1"></i>
-                                                        <span class="badge bg-primary" v-text="notification.target_branch">-</span>
-                                                    </td>
-                                                    <td v-text="notification.author_email">-</td>
-                                                    <td>
-                                                        <span :class="'badge ' + (notification.notification_sent ? 'bg-success' : 'bg-danger')" 
-                                                              v-text="notification.notification_sent ? '已发送' : '发送失败'">-</span>
-                                                    </td>
-                                                    <td v-text="formatDate(notification.created_at)">-</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                    <!-- 无通知提示 -->
+                                    <div v-if="notifications.length === 0" class="text-center py-4">
+                                        <div class="text-muted">
+                                            <i class="bi bi-bell-slash fs-1 mb-3 d-block"></i>
+                                            <p class="mb-2">暂无通知记录</p>
+                                            <p class="small">当有新的Merge Request时会显示在这里</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- 按项目分组的通知 -->
+                                    <div v-else class="notifications-grouped">
+                                        <div v-for="(projectNotifications, projectName) in groupedNotifications" :key="projectName" class="project-group">
+                                            <button class="project-group-header w-100 text-start" 
+                                                    :class="{ collapsed: collapsedProjects[projectName] }" 
+                                                    @click="toggleProject(projectName)">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="bi" :class="collapsedProjects[projectName] ? 'bi-chevron-right' : 'bi-chevron-down'" style="width: 1rem;"></i>
+                                                    <a v-if="getProjectUrl(projectNotifications[0])" 
+                                                       :href="getProjectUrl(projectNotifications[0])" 
+                                                       target="_blank" 
+                                                       class="ms-2 fw-bold text-white text-decoration-none" 
+                                                       v-text="projectName"
+                                                       @click.stop></a>
+                                                    <span v-else class="ms-2 fw-bold" v-text="projectName"></span>
+                                                    <span class="project-badge" v-text="projectNotifications.length + ' 条通知'"></span>
+                                                </div>
+                                                <small class="opacity-75">点击展开/收起</small>
+                                            </button>
+                                            
+                                            <div v-show="!collapsedProjects[projectName]" class="project-group-content">
+                                                <div class="overflow-hidden">
+                                                    <table class="table table-hover mb-0">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th>标题</th>
+                                                                <th>分支</th>
+                                                                <th>提交者</th>
+                                                                <th>Merge者</th>
+                                                                <th>状态</th>
+                                                                <th>时间</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr v-for="notification in projectNotifications" :key="notification.id">
+                                                                <td>
+                                                                    <a v-if="getMergeRequestUrl(notification)" 
+                                                                       :href="getMergeRequestUrl(notification)" 
+                                                                       target="_blank" 
+                                                                       class="fw-medium text-decoration-none" 
+                                                                       v-text="notification.title">-</a>
+                                                                    <span v-else class="fw-medium" v-text="notification.title">-</span>
+                                                                </td>
+                                                                <td>
+                                                                    <span class="badge bg-secondary" v-text="notification.source_branch">-</span>
+                                                                    <i class="bi bi-arrow-right mx-1"></i>
+                                                                    <span class="badge bg-primary" v-text="notification.target_branch">-</span>
+                                                                </td>
+                                                                <td>
+                                                                    <span v-text="extractNameFromEmail(notification.author_email)">-</span>
+                                                                </td>
+                                                                <td>
+                                                                    <div v-if="notification.assignee_emails && notification.assignee_emails.length > 0">
+                                                                        <template v-for="assignee in notification.assignee_emails" :key="assignee">
+                                                                            <span v-if="extractNameFromEmail(assignee) !== '-'" 
+                                                                                  class="badge bg-info me-1" 
+                                                                                  v-text="extractNameFromEmail(assignee)"></span>
+                                                                        </template>
+                                                                        <span v-if="!notification.assignee_emails.some(a => extractNameFromEmail(a) !== '-')" 
+                                                                              class="text-muted">-</span>
+                                                                    </div>
+                                                                    <span v-else class="text-muted">-</span>
+                                                                </td>
+                                                                <td>
+                                                                    <span :class="'badge ' + (notification.notification_sent ? 'bg-success' : 'bg-danger')" 
+                                                                          v-text="notification.notification_sent ? '已发送' : '发送失败'">-</span>
+                                                                </td>
+                                                                <td>
+                                                                    <small v-text="formatDate(notification.created_at)">-</small>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -213,7 +325,34 @@
                         total_webhooks: 0,
                         total_notifications: 0
                     },
-                    notifications: []
+                    notifications: [],
+                    collapsedProjects: {},
+                    projects: [],
+                    projectsMap: {}
+                }
+            },
+            computed: {
+                groupedNotifications() {
+                    const groups = {};
+                    
+                    this.notifications.forEach(notification => {
+                        const projectName = notification.project_name || '未知项目';
+                        
+                        if (!groups[projectName]) {
+                            groups[projectName] = [];
+                        }
+                        groups[projectName].push(notification);
+                    });
+                    
+                    // 按项目名称排序，并按时间排序每个项目的通知
+                    const sortedGroups = {};
+                    Object.keys(groups).sort().forEach(projectName => {
+                        sortedGroups[projectName] = groups[projectName].sort((a, b) => 
+                            new Date(b.created_at) - new Date(a.created_at)
+                        );
+                    });
+                    
+                    return sortedGroups;
                 }
             },
             methods: {
@@ -225,20 +364,72 @@
                         console.error('Failed to load stats:', error);
                     }
                 },
+                async loadProjects() {
+                    try {
+                        const response = await axios.get('/api/v1/projects');
+                        this.projects = response.data.data || [];
+                        
+                        // 建立项目ID到项目信息的映射
+                        this.projectsMap = {};
+                        this.projects.forEach(project => {
+                            this.projectsMap[project.id] = project;
+                        });
+                    } catch (error) {
+                        console.error('Failed to load projects:', error);
+                    }
+                },
                 async loadNotifications() {
                     try {
                         const response = await axios.get('/api/v1/notifications?page_size=10');
-                        this.notifications = response.data.data;
+                        this.notifications = response.data.data || [];
                     } catch (error) {
                         console.error('Failed to load notifications:', error);
                     }
                 },
                 formatDate(dateString) {
                     return new Date(dateString).toLocaleString('zh-CN');
+                },
+                toggleProject(projectName) {
+                    // 切换项目的展开/收起状态
+                    this.collapsedProjects[projectName] = !this.collapsedProjects[projectName];
+                    // 强制Vue响应式更新
+                    this.$forceUpdate();
+                },
+                extractNameFromEmail(email) {
+                    // 从邮箱中提取用户名部分，处理REDACTED情况
+                    if (!email || email === 'REDACTED' || email.trim() === '') {
+                        return '-';
+                    }
+                    
+                    // 如果邮箱包含@，取@前面的部分
+                    if (email.includes('@')) {
+                        const username = email.split('@')[0];
+                        // 如果用户名部分是REDACTED，也返回-
+                        return username === 'REDACTED' ? '-' : username;
+                    }
+                    
+                    // 如果整个字符串就是REDACTED，返回-
+                    return email === 'REDACTED' ? '-' : email;
+                },
+                getProjectUrl(notification) {
+                    // 根据通知的项目ID获取项目URL
+                    const project = this.projectsMap[notification.project_id];
+                    return project ? project.url : null;
+                },
+                getMergeRequestUrl(notification) {
+                    // 构建Merge Request URL
+                    const project = this.projectsMap[notification.project_id];
+                    if (!project || !project.url || !notification.merge_request_id) {
+                        return null;
+                    }
+                    
+                    // GitLab MR URL格式: {项目URL}/-/merge_requests/{MR_ID}
+                    return `${project.url}/-/merge_requests/${notification.merge_request_id}`;
                 }
             },
             mounted() {
                 this.loadStats();
+                this.loadProjects();
                 this.loadNotifications();
             }
         }).mount('#app');

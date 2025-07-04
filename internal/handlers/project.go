@@ -56,7 +56,7 @@ func (h *Handler) GetProjects(c *gin.Context) {
 		responses = append(responses, response)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": responses})
+	h.response.Success(c, responses)
 }
 
 func (h *Handler) CreateProject(c *gin.Context) {

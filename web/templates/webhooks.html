@@ -42,6 +42,107 @@
         .navbar-nav .nav-link.active {
             color: rgba(0,0,0,.9);
         }
+        
+        /* 表格优化样式 */
+        .table th {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        
+        .table .text-truncate {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .table .text-truncate-long {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .table td.no-wrap {
+            white-space: nowrap;
+        }
+        
+        .table .phone-privacy {
+            font-family: monospace;
+        }
+        
+        /* 表格布局优化 */
+        .table {
+            table-layout: fixed;
+        }
+        
+        /* 关联项目列样式 */
+        .projects-column {
+            max-width: 250px;
+            white-space: normal;
+            overflow: visible;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+        
+        .projects-column .badge {
+            margin: 2px 4px 2px 0;
+            display: inline-block;
+        }
+
+        /* 各列宽度设置 */
+        .table th:nth-child(1) { width: 60px; }   /* ID */
+        .table th:nth-child(2) { width: 120px; }  /* 名称 */
+        .table th:nth-child(3) { width: 200px; }  /* URL */
+        .table th:nth-child(4) { width: 200px; }  /* 描述 */
+        .table th:nth-child(5) { width: 80px; }   /* 状态 */
+        .table th:nth-child(6) { width: 250px; }  /* 关联项目 */
+        .table th:nth-child(7) { width: 120px; }  /* 创建时间 */
+        .table th:nth-child(8) { width: 120px; }  /* 操作 */
+        
+        /* 自定义Tooltip样式 */
+        .tooltip {
+            font-size: 0.875rem;
+        }
+        
+        .tooltip-inner {
+            background: linear-gradient(135deg, #495057 0%, #343a40 100%);
+            color: white;
+            border-radius: 0.375rem;
+            padding: 8px 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: none;
+            font-weight: 500;
+            letter-spacing: 0.025em;
+            max-width: 400px;
+            width: auto;
+            white-space: normal;
+            word-wrap: break-word;
+            text-align: left;
+            display: inline-block;
+        }
+        
+        .tooltip.bs-tooltip-top .tooltip-arrow::before {
+            border-top-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-bottom .tooltip-arrow::before {
+            border-bottom-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-start .tooltip-arrow::before {
+            border-left-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-end .tooltip-arrow::before {
+            border-right-color: #495057;
+        }
+        
+        /* 按钮hover时tooltip预览效果增强 */
+        .btn:hover {
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+        }
     </style>
 </head>
 <body>
@@ -93,7 +194,7 @@
     <!-- Webhook列表 -->
     <div class="card">
         <div class="card-body">
-            <div class="table-responsive">
+            <div class="overflow-hidden">
                 <table class="table table-hover">
                     <thead>
                         <tr>
@@ -112,26 +213,40 @@
                             <td v-text="webhook.id">-</td>
                             <td v-text="webhook.name">-</td>
                             <td>
-                                <code class="small" v-text="webhook.url">-</code>
+                                <code class="small text-truncate d-inline-block" style="max-width: 200px;" 
+                                      data-bs-toggle="tooltip" :title="webhook.url" v-text="webhook.url">-</code>
                             </td>
-                            <td v-text="webhook.description || '-'">-</td>
+                            <td>
+                                <span data-bs-toggle="tooltip" :title="webhook.description || '-'" 
+                                      class="text-truncate d-inline-block" style="max-width: 200px;"
+                                      v-text="webhook.description || '-'">-</span>
+                            </td>
                             <td>
                                 <span :class="'badge ' + (webhook.is_active ? 'bg-success' : 'bg-secondary')" 
                                       v-text="webhook.is_active ? '启用' : '禁用'">-</span>
                             </td>
-                            <td>
-                                <span v-for="project in webhook.projects" :key="project.id" class="badge bg-info me-1" v-text="project.name">-</span>
-                                <span v-if="!webhook.projects || webhook.projects.length === 0" class="text-muted">无</span>
+                            <td class="projects-column">
+                                <div>
+                                    <template v-for="project in webhook.projects" :key="project.id">
+                                        <a v-if="projectsMap[project.id] && projectsMap[project.id].url" 
+                                           :href="projectsMap[project.id].url" 
+                                           target="_blank" 
+                                           class="badge bg-info text-decoration-none"
+                                           v-text="project.name">-</a>
+                                        <span v-else class="badge bg-info" v-text="project.name">-</span>
+                                    </template>
+                                    <span v-if="!webhook.projects || webhook.projects.length === 0" class="text-muted">无</span>
+                                </div>
                             </td>
                             <td v-text="formatDate(webhook.created_at)">-</td>
                             <td>
-                                <button class="btn btn-sm btn-outline-warning me-1" @click="testWebhook(webhook)">
+                                <button class="btn btn-sm btn-outline-warning me-1" @click="testWebhook(webhook)" data-bs-toggle="tooltip" title="测试Webhook">
                                     <i class="bi bi-play"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-primary me-1" @click="editWebhook(webhook)">
+                                <button class="btn btn-sm btn-outline-primary me-1" @click="editWebhook(webhook)" data-bs-toggle="tooltip" title="编辑Webhook">
                                     <i class="bi bi-pencil"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" @click="deleteWebhook(webhook.id)">
+                                <button class="btn btn-sm btn-outline-danger" @click="deleteWebhook(webhook.id)" data-bs-toggle="tooltip" title="删除Webhook">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </td>
@@ -235,7 +350,9 @@
                     testingWebhook: null,
                     testResult: null,
                     testingSending: false,
-                    isEditing: false
+                    isEditing: false,
+                    projects: [],
+                    projectsMap: {}
                 }
             },
             methods: {
@@ -246,6 +363,20 @@
                     } catch (error) {
                         console.error('Failed to load webhooks:', error);
                         alert('加载Webhook列表失败');
+                    }
+                },
+                async loadProjects() {
+                    try {
+                        const response = await axios.get('/api/v1/projects');
+                        this.projects = response.data.data || [];
+                        
+                        // 建立项目ID到项目信息的映射
+                        this.projectsMap = {};
+                        this.projects.forEach(project => {
+                            this.projectsMap[project.id] = project;
+                        });
+                    } catch (error) {
+                        console.error('Failed to load projects:', error);
                     }
                 },
                 showAddModal() {
@@ -326,10 +457,42 @@
                 },
                 formatDate(dateString) {
                     return new Date(dateString).toLocaleString('zh-CN');
+                },
+                getProjectsText(projects) {
+                    if (!projects || projects.length === 0) return '无';
+                    return projects.map(p => p.name).join(', ');
+                },
+                initTooltips() {
+                    // 销毁旧的tooltip实例
+                    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                        const existingTooltip = bootstrap.Tooltip.getInstance(el);
+                        if (existingTooltip) {
+                            existingTooltip.dispose();
+                        }
+                    });
+                    
+                    // 创建新的tooltip实例
+                    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                    tooltipTriggerList.map(function (tooltipTriggerEl) {
+                        return new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
                 }
             },
             mounted() {
                 this.loadWebhooks();
+                this.loadProjects();
+                
+                // 初始化tooltips
+                this.$nextTick(() => {
+                    this.initTooltips();
+                });
+            },
+            
+            updated() {
+                // 在数据更新后重新初始化tooltips
+                this.$nextTick(() => {
+                    this.initTooltips();
+                });
             }
         }).mount('#app');
     </script>

@@ -42,6 +42,91 @@
         .navbar-nav .nav-link.active {
             color: rgba(0,0,0,.9);
         }
+        
+        /* 表格优化样式 */
+        .table th {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        
+        .table .text-truncate {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .table .text-truncate-long {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .table td.no-wrap {
+            white-space: nowrap;
+        }
+        
+        .table .phone-privacy {
+            font-family: monospace;
+        }
+        
+        /* 表格布局优化 */
+        .table {
+            table-layout: fixed;
+        }
+        
+        /* 各列宽度设置 */
+        .table th:nth-child(1) { width: 60px; }   /* ID */
+        .table th:nth-child(2) { width: 250px; }  /* 邮箱 */
+        .table th:nth-child(3) { width: 150px; }  /* 手机号 */
+        .table th:nth-child(4) { width: 150px; }  /* GitLab用户名 */
+        .table th:nth-child(5) { width: 120px; }  /* 创建时间 */
+        .table th:nth-child(6) { width: 120px; }  /* 操作 */
+        
+        /* 自定义Tooltip样式 */
+        .tooltip {
+            font-size: 0.875rem;
+        }
+        
+        .tooltip-inner {
+            background: linear-gradient(135deg, #495057 0%, #343a40 100%);
+            color: white;
+            border-radius: 0.375rem;
+            padding: 8px 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: none;
+            font-weight: 500;
+            letter-spacing: 0.025em;
+            max-width: 400px;
+            width: auto;
+            white-space: normal;
+            word-wrap: break-word;
+            text-align: left;
+            display: inline-block;
+        }
+        
+        .tooltip.bs-tooltip-top .tooltip-arrow::before {
+            border-top-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-bottom .tooltip-arrow::before {
+            border-bottom-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-start .tooltip-arrow::before {
+            border-left-color: #495057;
+        }
+        
+        .tooltip.bs-tooltip-end .tooltip-arrow::before {
+            border-right-color: #495057;
+        }
+        
+        /* 按钮hover时tooltip预览效果增强 */
+        .btn:hover {
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+        }
     </style>
 </head>
 <body>
@@ -93,7 +178,7 @@
                     <!-- 用户列表 -->
                     <div class="card">
                         <div class="card-body">
-                            <div class="table-responsive">
+                            <div class="overflow-hidden">
                                 <table class="table table-hover">
                                     <thead>
                                         <tr>
@@ -109,14 +194,14 @@
                                         <tr v-for="user in users" :key="user.id">
                                             <td v-text="user.id">-</td>
                                             <td v-text="user.email">-</td>
-                                            <td v-text="user.phone">-</td>
+                                            <td><span class="phone-privacy" v-text="formatPhone(user.phone)">-</span></td>
                                             <td v-text="user.gitlab_username || '-'">-</td>
                                             <td v-text="formatDate(user.created_at)">-</td>
                                             <td>
-                                                <button class="btn btn-sm btn-outline-primary me-1" @click="editUser(user)">
+                                                <button class="btn btn-sm btn-outline-primary me-1" @click="editUser(user)" data-bs-toggle="tooltip" title="编辑用户">
                                                     <i class="bi bi-pencil"></i>
                                                 </button>
-                                                <button class="btn btn-sm btn-outline-danger" @click="deleteUser(user.id)">
+                                                <button class="btn btn-sm btn-outline-danger" @click="deleteUser(user.id)" data-bs-toggle="tooltip" title="删除用户">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </td>
@@ -249,6 +334,14 @@
                 formatDate(dateString) {
                     return new Date(dateString).toLocaleString('zh-CN');
                 },
+                formatPhone(phone) {
+                    if (!phone || phone.length < 7) return phone;
+                    // 中间几位用*代替
+                    const start = phone.substring(0, 3);
+                    const end = phone.substring(phone.length - 4);
+                    const middle = '*'.repeat(phone.length - 7);
+                    return start + middle + end;
+                },
                 onEmailInput(event) {
                     // 只在新增模式且用户没有手动修改过GitLab用户名时自动填充
                     if (!this.isEditing && !this.userModifiedGitLabUsername) {
@@ -268,10 +361,37 @@
                 onGitLabUsernameInput() {
                     // 当用户手动修改GitLab用户名时，标记为已修改
                     this.userModifiedGitLabUsername = true;
+                },
+                initTooltips() {
+                    // 销毁旧的tooltip实例
+                    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                        const existingTooltip = bootstrap.Tooltip.getInstance(el);
+                        if (existingTooltip) {
+                            existingTooltip.dispose();
+                        }
+                    });
+                    
+                    // 创建新的tooltip实例
+                    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                    tooltipTriggerList.map(function (tooltipTriggerEl) {
+                        return new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
                 }
             },
             mounted() {
                 this.loadUsers();
+                
+                // 初始化tooltips
+                this.$nextTick(() => {
+                    this.initTooltips();
+                });
+            },
+            
+            updated() {
+                // 在数据更新后重新初始化tooltips
+                this.$nextTick(() => {
+                    this.initTooltips();
+                });
             }
         }).mount('#app');
     </script>
