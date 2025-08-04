@@ -354,6 +354,32 @@ onMounted(() => {
 }
 
 .notifications-card {
+  max-height: calc(100vh - 380px);
+  display: flex;
+  flex-direction: column;
+  
+  :deep(.el-card__body) {
+    flex: 1;
+    overflow: auto;
+    
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: #f5f7fa;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: #dcdfe6;
+      border-radius: 4px;
+      
+      &:hover {
+        background: #c0c4cc;
+      }
+    }
+  }
+  
   .card-header {
     display: flex;
     align-items: center;

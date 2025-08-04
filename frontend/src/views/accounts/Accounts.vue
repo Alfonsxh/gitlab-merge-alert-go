@@ -1,46 +1,47 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>账户管理</h2>
+      <h1 class="page-title">账户管理</h1>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><Plus /></el-icon>
         创建账户
       </el-button>
     </div>
 
-    <!-- 搜索栏 -->
-    <el-card class="search-card">
-      <el-form :inline="true">
-        <el-form-item label="搜索">
-          <el-input
-            v-model="searchForm.search"
-            placeholder="用户名或邮箱"
-            clearable
-            @clear="handleSearch"
-            @keyup.enter="handleSearch"
-          />
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="searchForm.role" clearable @change="handleSearch" style="width: 150px" placeholder="全部">
-            <el-option label="全部" value="" />
-            <el-option label="管理员" value="admin" />
-            <el-option label="普通用户" value="user" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">搜索</el-button>
-          <el-button @click="resetSearch">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <el-card>
+      <!-- 搜索栏 -->
+      <div class="search-bar">
+        <el-form :inline="true">
+          <el-form-item label="搜索">
+            <el-input
+              v-model="searchForm.search"
+              placeholder="用户名或邮箱"
+              clearable
+              @clear="handleSearch"
+              @keyup.enter="handleSearch"
+            />
+          </el-form-item>
+          <el-form-item label="角色">
+            <el-select v-model="searchForm.role" clearable @change="handleSearch" style="width: 150px" placeholder="全部">
+              <el-option label="全部" value="" />
+              <el-option label="管理员" value="admin" />
+              <el-option label="普通用户" value="user" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
+            <el-button @click="resetSearch">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
 
-    <!-- 账户列表 -->
-    <el-table
-      v-loading="loading"
-      :data="accountList"
-      stripe
-      style="width: 100%"
-    >
+      <!-- 账户列表 -->
+      <el-table
+        v-loading="loading"
+        :data="accountList"
+        stripe
+        style="width: 100%"
+      >
       <el-table-column prop="username" label="用户名" min-width="120" />
       <el-table-column prop="email" label="邮箱" min-width="180" />
       <el-table-column prop="role" label="角色" width="100">
@@ -97,17 +98,20 @@
         </template>
       </el-table-column>
     </el-table>
-
-    <!-- 分页 -->
-    <el-pagination
-      v-model:current-page="pagination.page"
-      v-model:page-size="pagination.pageSize"
-      :page-sizes="[10, 20, 50, 100]"
-      :total="pagination.total"
-      layout="total, sizes, prev, pager, next, jumper"
-      @size-change="fetchAccounts"
-      @current-change="fetchAccounts"
-    />
+    
+      <!-- 分页 -->
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="fetchAccounts"
+          @current-change="fetchAccounts"
+        />
+      </div>
+    </el-card>
 
     <!-- 创建账户对话框 -->
     <el-dialog
@@ -463,7 +467,7 @@ onMounted(() => {
 
 <style scoped lang="less">
 .page-container {
-  padding: 20px;
+  // 样式已在主布局中定义
 }
 
 .page-header {
@@ -471,31 +475,50 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-shrink: 0;
   
-  h2 {
+  .page-title {
     margin: 0;
     font-size: 24px;
     font-weight: 600;
     color: #303133;
+    display: flex;
+    align-items: center;
+    
+    &::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
+      border-radius: 2px;
+      margin-right: 12px;
+    }
   }
 }
 
-.search-card {
-  margin-bottom: 20px;
+.el-card {
+  :deep(.el-card__body) {
+    padding: 0;
+  }
+}
+
+.search-bar {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e6e8eb;
+  flex-shrink: 0;
   
   :deep(.el-card__body) {
     padding-bottom: 0;
   }
 }
 
-.el-table {
-  background: #fff;
-  margin-bottom: 20px;
-}
+// 表格样式已默认设置
 
-.el-pagination {
+.pagination-wrapper {
+  padding: 16px 20px;
+  border-top: 1px solid #e6e8eb;
+  flex-shrink: 0;
   background: #fff;
-  padding: 20px;
   display: flex;
   justify-content: center;
 }

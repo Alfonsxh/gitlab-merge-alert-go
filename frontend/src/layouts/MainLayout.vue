@@ -140,6 +140,7 @@ const handleCommand = async (command: string) => {
 .layout-container {
   height: 100vh;
   background-color: #f5f7fa;
+  overflow: hidden;
 }
 
 .layout-header {
@@ -218,6 +219,8 @@ const handleCommand = async (command: string) => {
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
   position: relative;
   transition: width 0.3s;
+  height: 100%;
+  overflow: hidden;
   
   .layout-menu {
     height: calc(100% - 50px);
@@ -229,6 +232,7 @@ const handleCommand = async (command: string) => {
       margin-bottom: 4px;
       border-radius: 8px;
       transition: all 0.3s;
+      position: relative;
       
       &:hover {
         background-color: #f5f7fa;
@@ -277,26 +281,34 @@ const handleCommand = async (command: string) => {
   padding: 0;
   overflow: hidden;
   position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   
   :deep(.page-container) {
     height: 100%;
-    overflow-y: auto;
+    overflow: auto;
+    padding: 20px;
     
     &::-webkit-scrollbar {
       width: 8px;
     }
     
     &::-webkit-scrollbar-track {
-      background: transparent;
+      background: #f5f7fa;
     }
     
     &::-webkit-scrollbar-thumb {
-      background: #ddd;
+      background: #dcdfe6;
       border-radius: 4px;
       
       &:hover {
-        background: #ccc;
+        background: #c0c4cc;
       }
+    }
+    
+    .page-header {
+      margin-bottom: 20px;
     }
   }
 }

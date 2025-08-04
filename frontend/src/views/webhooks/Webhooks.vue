@@ -13,11 +13,11 @@
         :data="webhooks"
         v-loading="loading"
         stripe
-        style="width: 100%"
+        style="width: 100%;"
       >
-        <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column prop="id" label="ID" width="80" />
         
-        <el-table-column prop="name" label="名称" min-width="150">
+        <el-table-column prop="name" label="名称" min-width="200">
           <template #default="{ row }">
             <div class="webhook-name">
               <el-icon><Connection /></el-icon>
@@ -26,7 +26,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="url" label="URL" min-width="300">
+        <el-table-column prop="url" label="URL" min-width="400">
           <template #default="{ row }">
             <div class="webhook-url">
               <el-text class="url-text" truncated>{{ row.url }}</el-text>
@@ -42,7 +42,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="description" label="描述" show-overflow-tooltip />
+        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         
         <el-table-column prop="is_active" label="状态" width="100">
           <template #default="{ row }">
@@ -55,7 +55,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="关联项目" width="300">
+        <el-table-column label="关联项目" min-width="250">
           <template #default="{ row }">
             <div v-if="row.projects?.length" class="project-tags">
               <el-popover
@@ -114,13 +114,13 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="created_at" label="创建时间" width="160">
+        <el-table-column prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="testWebhook(row)">
               <el-icon><VideoPlay /></el-icon>
@@ -417,6 +417,24 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   
+  .page-title {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: #303133;
+    display: flex;
+    align-items: center;
+    
+    &::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
+      border-radius: 2px;
+      margin-right: 12px;
+    }
+  }
+  
   :deep(.el-button) {
     height: 40px;
     font-size: 15px;
@@ -558,7 +576,46 @@ onMounted(() => {
   }
 }
 
+// 表格列宽度优化
+:deep(.el-table) {
+  // 确保表格能够自适应容器宽度
+  table-layout: fixed;
+  width: 100%;
+  
+  // 优化长文本显示
+  .cell {
+    word-break: break-word;
+    word-wrap: break-word;
+  }
+  
+  // 优化固定列的显示
+  .el-table__fixed-right {
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
 // 响应式设计
+@media screen and (max-width: 1200px) {
+  :deep(.el-table) {
+    // 在中等屏幕上调整名称列宽度
+    .el-table__body .el-table__row td:nth-child(2) {
+      width: 18% !important;
+    }
+    // 调整URL列宽度
+    .el-table__body .el-table__row td:nth-child(3) {
+      width: 28% !important;
+    }
+    // 调整描述列宽度
+    .el-table__body .el-table__row td:nth-child(4) {
+      width: 18% !important;
+    }
+    // 调整关联项目列宽度
+    .el-table__body .el-table__row td:nth-child(6) {
+      width: 22% !important;
+    }
+  }
+}
+
 @media screen and (max-width: 768px) {
   .page-header {
     flex-direction: column;
@@ -572,6 +629,24 @@ onMounted(() => {
   
   :deep(.el-table) {
     font-size: 12px;
+    
+    // 在小屏幕上隐藏描述列和关联项目列
+    .el-table__header th:nth-child(4),
+    .el-table__body td:nth-child(4),
+    .el-table__header th:nth-child(6),
+    .el-table__body td:nth-child(6) {
+      display: none;
+    }
+    
+    // 调整名称列在小屏幕上的显示
+    .el-table__body .el-table__row td:nth-child(2) {
+      width: 25% !important;
+    }
+    
+    // 调整URL列在小屏幕上的显示
+    .el-table__body .el-table__row td:nth-child(3) {
+      width: 45% !important;
+    }
   }
   
   :deep(.el-dialog) {

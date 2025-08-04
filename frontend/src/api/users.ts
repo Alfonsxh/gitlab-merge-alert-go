@@ -4,6 +4,7 @@ export interface User {
   id: number
   email: string
   phone: string
+  name?: string
   gitlab_username?: string
   created_at: string
   updated_at: string

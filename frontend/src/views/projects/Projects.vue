@@ -9,7 +9,7 @@
     </div>
     
     <el-card>
-      <el-empty v-if="projects.length === 0" description="还没有添加任何项目">
+      <el-empty v-if="projects.length === 0" description="还没有添加任何项目" class="empty-container">
         <el-button type="primary" @click="showAddModal">开始添加项目</el-button>
       </el-empty>
       
@@ -42,10 +42,11 @@
               :data="groupProjects"
               size="small"
               stripe
+              style="width: 100%;"
             >
-              <el-table-column label="GitLab项目ID" prop="gitlab_project_id" width="100" />
+              <el-table-column label="GitLab项目ID" prop="gitlab_project_id" width="150" />
               
-              <el-table-column label="项目名称" prop="name" min-width="180" width="220">
+              <el-table-column label="项目名称" prop="name" min-width="300">
                 <template #default="{ row }">
                   <el-link :href="row.url" target="_blank" type="primary">
                     {{ row.name }}
@@ -54,9 +55,9 @@
                 </template>
               </el-table-column>
               
-              <el-table-column label="描述" prop="description" min-width="200" show-overflow-tooltip />
+              <el-table-column label="描述" prop="description" min-width="250" show-overflow-tooltip />
               
-              <el-table-column label="GitLab Webhook" width="120">
+              <el-table-column label="GitLab Webhook" width="180">
                 <template #default="{ row }">
                   <el-space>
                     <el-tag 
@@ -79,7 +80,7 @@
                 </template>
               </el-table-column>
               
-              <el-table-column label="关联Webhook" width="150">
+              <el-table-column label="关联Webhook" min-width="200">
                 <template #default="{ row }">
                   <el-space v-if="row.webhooks?.length" wrap>
                     <el-tag 
@@ -95,13 +96,13 @@
                 </template>
               </el-table-column>
               
-              <el-table-column label="创建时间" prop="created_at" width="140">
+              <el-table-column label="创建时间" prop="created_at" width="180">
                 <template #default="{ row }">
                   {{ formatDate(row.created_at) }}
                 </template>
               </el-table-column>
               
-              <el-table-column label="操作" width="280" fixed="right">
+              <el-table-column label="操作" width="320" fixed="right">
                 <template #default="{ row }">
                   <el-button link type="primary" @click="manageWebhooks(row)">
                     <el-icon><Connection /></el-icon>
@@ -548,7 +549,7 @@ onMounted(() => {
 
 <style scoped lang="less">
 .page-container {
-  padding: 20px;
+  // 样式已在主布局中定义
 }
 
 .page-header {
@@ -556,6 +557,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-shrink: 0;
   
   .page-title {
     margin: 0;
@@ -581,9 +583,39 @@ onMounted(() => {
 }
 
 .el-card {
+  max-height: calc(100vh - 200px);
+  display: flex;
+  flex-direction: column;
+  
   :deep(.el-card__body) {
     padding: 20px;
+    overflow: auto;
+    
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: #f5f7fa;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: #dcdfe6;
+      border-radius: 4px;
+      
+      &:hover {
+        background: #c0c4cc;
+      }
+    }
   }
+}
+
+.empty-container {
+  padding: 60px 20px;
+}
+
+.projects-content {
+  // 内容会随高度自适应
 }
 
 :deep(.el-alert) {
@@ -837,10 +869,63 @@ onMounted(() => {
   }
 }
 
+// 表格列宽度优化
+:deep(.el-table) {
+  // 确保表格能够自适应容器宽度
+  table-layout: fixed;
+  width: 100%;
+  
+  // 优化长文本显示
+  .cell {
+    word-break: break-word;
+    word-wrap: break-word;
+  }
+  
+  // 优化固定列的显示
+  .el-table__fixed-right {
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
 // 响应式设计
+@media screen and (max-width: 1200px) {
+  :deep(.el-table) {
+    // 在中等屏幕上调整项目名称列宽度
+    .el-table__body .el-table__row td:nth-child(2) {
+      width: 28% !important;
+    }
+    // 调整描述列宽度
+    .el-table__body .el-table__row td:nth-child(3) {
+      width: 22% !important;
+    }
+    // 调整关联Webhook列宽度
+    .el-table__body .el-table__row td:nth-child(5) {
+      width: 18% !important;
+    }
+  }
+}
+
 @media screen and (max-width: 768px) {
   :deep(.el-table) {
     font-size: 12px;
+    
+    // 在小屏幕上隐藏描述列和GitLab Webhook列
+    .el-table__header th:nth-child(3),
+    .el-table__body td:nth-child(3),
+    .el-table__header th:nth-child(4),
+    .el-table__body td:nth-child(4) {
+      display: none;
+    }
+    
+    // 调整项目名称列在小屏幕上的显示
+    .el-table__body .el-table__row td:nth-child(2) {
+      width: 40% !important;
+    }
+    
+    // 调整关联Webhook列在小屏幕上的显示
+    .el-table__body .el-table__row td:nth-child(5) {
+      width: 35% !important;
+    }
   }
   
   :deep(.el-dialog) {

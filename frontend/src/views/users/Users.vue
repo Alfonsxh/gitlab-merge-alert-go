@@ -13,11 +13,11 @@
         :data="users"
         v-loading="loading"
         stripe
-        style="width: 100%"
+        style="width: 100%;"
       >
-        <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column prop="id" label="ID" width="80" />
         
-        <el-table-column prop="email" label="邮箱" width="280" show-overflow-tooltip>
+        <el-table-column prop="email" label="邮箱" min-width="280" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="email-cell">
               <el-icon><Message /></el-icon>
@@ -26,7 +26,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="phone" label="手机号" width="140">
+        <el-table-column prop="phone" label="手机号" width="150">
           <template #default="{ row }">
             <el-tag type="info" class="phone-tag">
               {{ formatPhone(row.phone) }}
@@ -34,7 +34,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="gitlab_username" label="GitLab用户名" min-width="150" show-overflow-tooltip>
+        <el-table-column prop="gitlab_username" label="GitLab用户名" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="gitlab-username">
               <el-icon><UserFilled /></el-icon>
@@ -49,7 +49,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="editUser(row)">
               <el-icon><Edit /></el-icon>
@@ -265,6 +265,24 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   
+  .page-title {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: #303133;
+    display: flex;
+    align-items: center;
+    
+    &::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
+      border-radius: 2px;
+      margin-right: 12px;
+    }
+  }
+  
   :deep(.el-button) {
     height: 40px;
     font-size: 15px;
@@ -326,7 +344,20 @@ onMounted(() => {
   }
 }
 
-// 响应式设计
+// 表格列宽度优化
+:deep(.el-table) {
+  // 优化长文本显示
+  .cell {
+    word-break: break-word;
+    word-wrap: break-word;
+  }
+  
+  // 优化固定列的显示
+  .el-table__fixed-right {
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
 @media screen and (max-width: 768px) {
   .page-header {
     flex-direction: column;
@@ -340,6 +371,17 @@ onMounted(() => {
   
   :deep(.el-table) {
     font-size: 12px;
+    
+    // 在小屏幕上隐藏GitLab用户名列，优化显示
+    .el-table__header th:nth-child(4),
+    .el-table__body td:nth-child(4) {
+      display: none;
+    }
+    
+    // 调整邮箱列在小屏幕上的显示
+    .el-table__body .el-table__row td:nth-child(2) {
+      width: 45% !important;
+    }
   }
   
   :deep(.el-dialog) {
