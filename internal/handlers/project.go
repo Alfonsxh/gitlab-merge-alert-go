@@ -626,19 +626,6 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 	h.response.BatchOperation(c, successCount, failureCount, batchResults)
 }
 
-func (h *Handler) ProjectsPage(c *gin.Context) {
-	data := gin.H{
-		"title":       "项目管理",
-		"currentPage": "projects",
-	}
-
-	if err := h.renderTemplate(c, "projects.html", data); err != nil {
-		logger.GetLogger().Errorf("Failed to render projects template: %v", err)
-		h.renderErrorPage(c, "项目管理页面加载失败")
-		return
-	}
-}
-
 // SyncGitLabWebhook 同步GitLab Webhook
 func (h *Handler) SyncGitLabWebhook(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)

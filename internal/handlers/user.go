@@ -163,16 +163,3 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
-
-func (h *Handler) UsersPage(c *gin.Context) {
-	data := gin.H{
-		"title":       "用户管理",
-		"currentPage": "users",
-	}
-
-	if err := h.renderTemplate(c, "users.html", data); err != nil {
-		logger.GetLogger().Errorf("Failed to render users template: %v", err)
-		h.renderErrorPage(c, "用户管理页面加载失败")
-		return
-	}
-}

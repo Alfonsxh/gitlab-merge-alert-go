@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"gitlab-merge-alert-go/internal/config"
 	"gitlab-merge-alert-go/internal/database"
@@ -43,9 +44,9 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	// 设置静态文件
-	router.Static("/static", "./web/static")
-	router.LoadHTMLGlob("web/templates/*")
+	// 为 Vue SPA 服务静态文件
+	router.Static("/assets", "./frontend/dist/assets")
+	router.StaticFile("/vite.svg", "./frontend/dist/vite.svg")
 
 	// 初始化处理器
 	h := handlers.New(db, cfg)
@@ -61,11 +62,16 @@ func main() {
 }
 
 func setupRoutes(router *gin.Engine, h *handlers.Handler) {
-	// Web页面路由
-	router.GET("/", h.Dashboard)
-	router.GET("/users", h.UsersPage)
-	router.GET("/projects", h.ProjectsPage)
-	router.GET("/webhooks", h.WebhooksPage)
+	// 配置 SPA 路由
+	router.NoRoute(func(c *gin.Context) {
+		// API 路由不存在时返回 404
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(404, gin.H{"error": "API endpoint not found"})
+			return
+		}
+		// 其他路由返回 index.html
+		c.File("./frontend/dist/index.html")
+	})
 
 	// API路由
 	api := router.Group("/api/v1")

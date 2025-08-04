@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"gitlab-merge-alert-go/internal/models"
-	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -83,19 +82,4 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": responses})
-}
-
-func (h *Handler) Dashboard(c *gin.Context) {
-	logger.GetLogger().Infof("Dashboard access from %s", c.ClientIP())
-
-	data := gin.H{
-		"title":       "GitLab Merge Alert Dashboard",
-		"currentPage": "dashboard",
-	}
-
-	if err := h.renderTemplate(c, "dashboard.html", data); err != nil {
-		logger.GetLogger().Errorf("Failed to render dashboard template: %v", err)
-		h.renderErrorPage(c, "仪表板页面加载失败")
-		return
-	}
 }

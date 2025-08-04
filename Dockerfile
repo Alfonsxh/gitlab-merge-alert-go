@@ -1,4 +1,30 @@
-FROM golang:1.23-alpine AS builder
+# 前端构建阶段
+FROM node:18-alpine AS frontend-builder
+
+# 配置 Alpine 中国大陆镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# 设置工作目录
+WORKDIR /app
+
+# 设置 npm 镜像
+RUN npm config set registry https://registry.npmmirror.com
+
+# 复制前端依赖文件
+COPY frontend/package*.json ./frontend/
+
+# 安装前端依赖
+WORKDIR /app/frontend
+RUN npm ci --no-audit
+
+# 复制前端源代码
+COPY frontend/ ./
+
+# 构建前端
+RUN npm run build
+
+# 后端构建阶段
+FROM golang:1.23-alpine AS backend-builder
 
 # 配置 Alpine 中国大陆镜像源
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
@@ -38,11 +64,13 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 # 复制构建的二进制文件
-COPY --from=builder /app/main .
+COPY --from=backend-builder /app/main .
 
-# 复制配置文件和静态资源
-COPY --from=builder /app/web ./web
-COPY --from=builder /app/config.yaml .
+# 复制配置文件
+COPY --from=backend-builder /app/config.yaml .
+
+# 复制前端构建文件
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # 创建数据目录
 RUN mkdir -p ./data

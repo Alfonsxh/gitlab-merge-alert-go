@@ -1,15 +1,20 @@
-.PHONY: build run test clean docker-build docker-run migrate migrate-status migrate-rollback
+.PHONY: build run test clean docker-build docker-run migrate migrate-status migrate-rollback frontend-install frontend-dev frontend-build
 
 # 应用名称
 APP_NAME=gitlab-merge-alert-go
 
 # 构建应用
-build:
+build: frontend-build
 	go build -o bin/$(APP_NAME) ./cmd/server
 
-# 运行应用
+# 运行应用（后端）
 run:
 	go run ./cmd/server
+
+# 开发模式（同时运行前后端）
+dev:
+	@echo "Starting backend and frontend in development mode..."
+	@make run & make frontend-dev
 
 # 运行测试
 test:
@@ -19,6 +24,7 @@ test:
 clean:
 	rm -rf bin/
 	rm -f data/gitlab-merge-alert.db
+	rm -rf frontend/dist
 
 # 安装依赖
 deps:
@@ -83,3 +89,15 @@ migrate-status:
 migrate-rollback:
 	@echo "Rolling back last migration..."
 	@go run cmd/migrate/main.go -rollback
+
+# 前端相关命令
+frontend-install:
+	cd frontend && npm install
+
+frontend-dev:
+	cd frontend && npm run dev
+
+frontend-build:
+	@echo "Building frontend..."
+	cd frontend && npm install && npm run build
+	@echo "Frontend build complete"

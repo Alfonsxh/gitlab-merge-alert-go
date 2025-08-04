@@ -252,16 +252,3 @@ func (h *Handler) UnlinkProjectWebhook(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Project and webhook unlinked successfully"})
 }
-
-func (h *Handler) WebhooksPage(c *gin.Context) {
-	data := gin.H{
-		"title":       "Webhook管理",
-		"currentPage": "webhooks",
-	}
-
-	if err := h.renderTemplate(c, "webhooks.html", data); err != nil {
-		logger.GetLogger().Errorf("Failed to render webhooks template: %v", err)
-		h.renderErrorPage(c, "Webhook管理页面加载失败")
-		return
-	}
-}
