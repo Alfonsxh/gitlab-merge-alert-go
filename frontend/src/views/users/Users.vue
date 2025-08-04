@@ -17,7 +17,7 @@
       >
         <el-table-column prop="id" label="ID" width="60" />
         
-        <el-table-column prop="email" label="邮箱" min-width="200">
+        <el-table-column prop="email" label="邮箱" width="280" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="email-cell">
               <el-icon><Message /></el-icon>
@@ -26,7 +26,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="phone" label="手机号" width="150">
+        <el-table-column prop="phone" label="手机号" width="140">
           <template #default="{ row }">
             <el-tag type="info" class="phone-tag">
               {{ formatPhone(row.phone) }}
@@ -34,7 +34,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="gitlab_username" label="GitLab用户名" width="150">
+        <el-table-column prop="gitlab_username" label="GitLab用户名" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="gitlab-username">
               <el-icon><UserFilled /></el-icon>

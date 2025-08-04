@@ -18,6 +18,7 @@ type Project struct {
 	AutoManageWebhook bool       `json:"auto_manage_webhook" gorm:"column:auto_manage_webhook;default:true"` // 是否自动管理webhook
 	LastSyncAt        *time.Time `json:"last_sync_at,omitempty" gorm:"column:last_sync_at"`                  // 最后同步时间
 
+	CreatedBy *uint     `json:"created_by,omitempty" gorm:"column:created_by;index"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at"`
 

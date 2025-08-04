@@ -16,6 +16,7 @@ type Notification struct {
 	Status           string    `json:"status" gorm:"column:status"`
 	NotificationSent bool      `json:"notification_sent" gorm:"column:notification_sent;default:false"`
 	ErrorMessage     string    `json:"error_message" gorm:"column:error_message"`
+	OwnerID          *uint     `json:"owner_id,omitempty" gorm:"column:owner_id;index"`
 	CreatedAt        time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt        time.Time `json:"updated_at" gorm:"column:updated_at"`
 

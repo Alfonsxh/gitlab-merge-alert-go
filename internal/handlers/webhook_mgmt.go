@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
 	"gitlab-merge-alert-go/pkg/logger"
 
@@ -15,7 +16,12 @@ import (
 
 func (h *Handler) GetWebhooks(c *gin.Context) {
 	var webhooks []models.Webhook
-	if err := h.db.Preload("Projects").Find(&webhooks).Error; err != nil {
+	
+	// 应用所有权过滤
+	query := h.db.Preload("Projects")
+	query = middleware.ApplyOwnershipFilter(c, query, "webhooks")
+	
+	if err := query.Find(&webhooks).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to fetch webhooks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch webhooks"})
 		return
@@ -62,11 +68,15 @@ func (h *Handler) CreateWebhook(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户ID
+	accountID, _ := middleware.GetAccountID(c)
+	
 	webhook := &models.Webhook{
 		Name:        req.Name,
 		URL:         req.URL,
 		Description: req.Description,
 		IsActive:    true,
+		CreatedBy:   &accountID,
 	}
 
 	if req.IsActive != nil {

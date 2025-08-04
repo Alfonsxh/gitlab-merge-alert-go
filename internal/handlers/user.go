@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
 	"gitlab-merge-alert-go/pkg/logger"
 
@@ -15,7 +16,12 @@ import (
 
 func (h *Handler) GetUsers(c *gin.Context) {
 	var users []models.User
-	if err := h.db.Find(&users).Error; err != nil {
+	
+	// 应用所有权过滤
+	query := h.db
+	query = middleware.ApplyOwnershipFilter(c, query, "users")
+	
+	if err := query.Find(&users).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to fetch users: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
 		return
@@ -47,11 +53,15 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户ID
+	accountID, _ := middleware.GetAccountID(c)
+	
 	user := &models.User{
 		Email:          req.Email,
 		Phone:          req.Phone,
 		Name:           req.Name,
 		GitLabUsername: req.GitLabUsername,
+		CreatedBy:      &accountID,
 	}
 
 	if err := h.db.Create(user).Error; err != nil {

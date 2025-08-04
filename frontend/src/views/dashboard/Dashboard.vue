@@ -254,7 +254,7 @@ const getMergeRequestUrl = (notification: Notification) => {
 const loadStats = async () => {
   try {
     const res = await statsApi.getStats()
-    stats.value = res.data
+    stats.value = res.data || res // 兼容处理
   } catch (error) {
     ElMessage.error('加载统计数据失败')
   }
@@ -263,7 +263,9 @@ const loadStats = async () => {
 const loadProjects = async () => {
   try {
     const res = await projectsApi.getProjects()
-    projects.value = res.data || []
+    // 确保 projects.value 是数组
+    const projectData = res.data || res || []
+    projects.value = Array.isArray(projectData) ? projectData : []
     
     // 建立项目ID到项目信息的映射
     projectsMap.value = {}
@@ -271,6 +273,8 @@ const loadProjects = async () => {
       projectsMap.value[project.id] = project
     })
   } catch (error) {
+    console.error('加载项目数据失败:', error)
+    projects.value = []
     ElMessage.error('加载项目数据失败')
   }
 }
@@ -278,8 +282,12 @@ const loadProjects = async () => {
 const loadNotifications = async () => {
   try {
     const res = await notificationsApi.getNotifications({ page_size: 10 })
-    notifications.value = res.data || []
+    // 确保 notifications.value 是数组
+    const notificationData = res.data || res || []
+    notifications.value = Array.isArray(notificationData) ? notificationData : []
   } catch (error) {
+    console.error('加载通知数据失败:', error)
+    notifications.value = []
     ElMessage.error('加载通知数据失败')
   }
 }

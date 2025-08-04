@@ -10,6 +10,7 @@ type User struct {
 	Phone          string    `json:"phone" gorm:"column:phone;not null;default:''"`
 	Name           string    `json:"name" gorm:"column:name"`
 	GitLabUsername string    `json:"gitlab_username" gorm:"column:gitlab_username;uniqueIndex;default:''"`
+	CreatedBy      *uint     `json:"created_by,omitempty" gorm:"column:created_by;index"`
 	CreatedAt      time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt      time.Time `json:"updated_at" gorm:"column:updated_at"`
 }

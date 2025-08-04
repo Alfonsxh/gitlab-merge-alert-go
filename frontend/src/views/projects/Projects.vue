@@ -1,8 +1,8 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h1 class="page-title">项目管理</h1>
-      <el-button type="primary" @click="showAddModal" size="large">
+      <h2 class="page-title">项目管理</h2>
+      <el-button type="primary" @click="showAddModal">
         <el-icon><Plus /></el-icon>
         添加项目
       </el-button>
@@ -43,9 +43,9 @@
               size="small"
               stripe
             >
-              <el-table-column label="ID" prop="id" width="60" />
+              <el-table-column label="GitLab项目ID" prop="gitlab_project_id" width="100" />
               
-              <el-table-column label="项目名称" prop="name" min-width="200">
+              <el-table-column label="项目名称" prop="name" min-width="180" width="220">
                 <template #default="{ row }">
                   <el-link :href="row.url" target="_blank" type="primary">
                     {{ row.name }}
@@ -54,11 +54,9 @@
                 </template>
               </el-table-column>
               
-              <el-table-column label="GitLab项目ID" prop="gitlab_project_id" width="120" />
+              <el-table-column label="描述" prop="description" min-width="200" show-overflow-tooltip />
               
-              <el-table-column label="描述" prop="description" show-overflow-tooltip />
-              
-              <el-table-column label="GitLab Webhook" width="150">
+              <el-table-column label="GitLab Webhook" width="120">
                 <template #default="{ row }">
                   <el-space>
                     <el-tag 
@@ -81,7 +79,7 @@
                 </template>
               </el-table-column>
               
-              <el-table-column label="关联Webhook" width="200">
+              <el-table-column label="关联Webhook" width="150">
                 <template #default="{ row }">
                   <el-space v-if="row.webhooks?.length" wrap>
                     <el-tag 
@@ -97,19 +95,19 @@
                 </template>
               </el-table-column>
               
-              <el-table-column label="创建时间" prop="created_at" width="160">
+              <el-table-column label="创建时间" prop="created_at" width="140">
                 <template #default="{ row }">
                   {{ formatDate(row.created_at) }}
                 </template>
               </el-table-column>
               
-              <el-table-column label="操作" width="240" fixed="right">
+              <el-table-column label="操作" width="280" fixed="right">
                 <template #default="{ row }">
-                  <el-button link type="primary" size="small" @click="manageWebhooks(row)">
+                  <el-button link type="primary" @click="manageWebhooks(row)">
                     <el-icon><Connection /></el-icon>
                     管理Webhook
                   </el-button>
-                  <el-button link type="primary" size="small" @click="editProject(row)">
+                  <el-button link type="primary" @click="editProject(row)">
                     <el-icon><Edit /></el-icon>
                     编辑
                   </el-button>
@@ -120,7 +118,7 @@
                     @confirm="deleteProject(row.id)"
                   >
                     <template #reference>
-                      <el-button link type="danger" size="small">
+                      <el-button link type="danger">
                         <el-icon><Delete /></el-icon>
                         删除
                       </el-button>
@@ -138,14 +136,14 @@
     <el-dialog
       v-model="projectModalVisible"
       :title="isEditing ? '编辑项目' : '添加项目'"
-      width="600px"
+      width="650px"
       :close-on-click-modal="false"
     >
       <el-form
         ref="projectFormRef"
         :model="currentProject"
         :rules="projectRules"
-        label-width="120px"
+        label-width="140px"
       >
         <el-form-item label="项目URL" prop="url">
           <el-input
@@ -194,9 +192,11 @@
         </el-form-item>
         
         <el-form-item label="自动管理Webhook">
-          <el-switch v-model="currentProject.auto_manage_webhook" />
-          <div class="form-item-help">
-            开启后，系统会自动在GitLab上创建和管理Webhook
+          <div style="display: flex; align-items: center; width: 100%;">
+            <el-switch v-model="currentProject.auto_manage_webhook" style="margin-right: 12px;" />
+            <span style="font-size: 13px; color: #909399; line-height: 1.2;">
+              开启后，系统会自动在GitLab上创建和管理Webhook
+            </span>
           </div>
         </el-form-item>
       </el-form>
@@ -213,34 +213,64 @@
     <el-dialog
       v-model="webhookModalVisible"
       title="管理项目Webhook"
-      width="600px"
+      width="700px"
+      :close-on-click-modal="false"
     >
-      <el-form v-if="managingProject">
-        <el-form-item label="项目名称">
-          <el-tag type="info">{{ managingProject.name }}</el-tag>
-        </el-form-item>
+      <div v-if="managingProject" class="webhook-manage-dialog">
+        <div class="project-info-section">
+          <div class="project-label">当前项目</div>
+          <div class="project-details">
+            <div class="project-name">
+              <el-icon><FolderOpened /></el-icon>
+              {{ managingProject.name }}
+            </div>
+            <div class="project-url">{{ managingProject.url }}</div>
+          </div>
+        </div>
         
-        <el-form-item label="选择Webhook">
-          <el-checkbox-group v-model="selectedWebhookIds">
-            <el-checkbox
+        <div class="webhook-selection">
+          <div class="section-title">选择要关联的企业微信机器人</div>
+          <el-empty v-if="availableWebhooks.length === 0" description="暂无可用的Webhook">
+            <el-button type="primary" @click="goToWebhooks">前往创建</el-button>
+          </el-empty>
+          
+          <div v-else class="webhook-list">
+            <div
               v-for="webhook in availableWebhooks"
               :key="webhook.id"
-              :label="webhook.id"
-              :value="webhook.id"
+              class="webhook-item"
+              :class="{ selected: selectedWebhookIds.includes(webhook.id) }"
+              @click="toggleWebhook(webhook.id)"
             >
-              {{ webhook.name }}
-              <el-tag size="small" type="info" style="margin-left: 8px">
-                {{ webhook.url }}
+              <el-checkbox
+                :model-value="selectedWebhookIds.includes(webhook.id)"
+                @change="toggleWebhook(webhook.id)"
+                class="webhook-checkbox"
+              />
+              <div class="webhook-content">
+                <div class="webhook-main">
+                  <el-icon class="webhook-icon"><Connection /></el-icon>
+                  <span class="webhook-name">{{ webhook.name }}</span>
+                </div>
+                <div class="webhook-url">{{ formatWebhookUrl(webhook.url) }}</div>
+              </div>
+              <el-tag
+                v-if="selectedWebhookIds.includes(webhook.id)"
+                type="success"
+                size="small"
+                class="selected-tag"
+              >
+                已选择
               </el-tag>
-            </el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-      </el-form>
+            </div>
+          </div>
+        </div>
+      </div>
       
       <template #footer>
         <el-button @click="webhookModalVisible = false">取消</el-button>
         <el-button type="primary" @click="saveProjectWebhooks" :loading="submitting">
-          保存
+          保存（{{ selectedWebhookIds.length }}）
         </el-button>
       </template>
     </el-dialog>
@@ -251,6 +281,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
+import { useRouter } from 'vue-router'
 import {
   Plus,
   Edit,
@@ -264,6 +295,7 @@ import { projectsApi, webhooksApi } from '@/api'
 import type { Project, Webhook } from '@/api'
 import { formatDate } from '@/utils/format'
 
+const router = useRouter()
 const projects = ref<Project[]>([])
 const availableWebhooks = ref<Webhook[]>([])
 const loading = ref(false)
@@ -304,20 +336,33 @@ const groupedProjects = computed(() => {
   const groups: Record<string, Project[]> = {}
   
   projects.value.forEach(project => {
-    // 从项目URL中提取组名
-    const match = project.url.match(/\/\/[^\/]+\/([^\/]+)/)
-    const groupName = match ? match[1] : '其他'
-    
-    if (!groups[groupName]) {
-      groups[groupName] = []
+    // 从项目URL中提取完整的组路径
+    // 例如: https://gitlab.woqutech.com/QDataPro/qpatchs/Q-20220721-001
+    // 提取: QDataPro/qpatchs
+    const urlParts = project.url.split('/')
+    const hostIndex = urlParts.findIndex(part => part.includes('.'))
+    if (hostIndex >= 0 && urlParts.length > hostIndex + 2) {
+      // 获取除了最后一个部分（项目名）之外的所有路径部分
+      const pathParts = urlParts.slice(hostIndex + 1, -1)
+      const groupName = pathParts.join('/')
+      
+      if (!groups[groupName]) {
+        groups[groupName] = []
+      }
+      groups[groupName].push(project)
+    } else {
+      // 无法解析的URL，放入"其他"组
+      if (!groups['其他']) {
+        groups['其他'] = []
+      }
+      groups['其他'].push(project)
     }
-    groups[groupName].push(project)
   })
   
-  // 按组名排序
+  // 按组名排序，组内按 GitLab项目ID 增序排列
   const sortedGroups: Record<string, Project[]> = {}
   Object.keys(groups).sort().forEach(groupName => {
-    sortedGroups[groupName] = groups[groupName].sort((a, b) => a.name.localeCompare(b.name))
+    sortedGroups[groupName] = groups[groupName].sort((a, b) => a.gitlab_project_id - b.gitlab_project_id)
   })
   
   return sortedGroups
@@ -328,6 +373,12 @@ const loadProjects = async () => {
   try {
     const res = await projectsApi.getProjects()
     projects.value = res.data || []
+    
+    // 默认展开第一个组
+    const firstGroup = Object.keys(groupedProjects.value)[0]
+    if (firstGroup && activeGroups.value.length === 0) {
+      activeGroups.value = [firstGroup]
+    }
   } catch (error) {
     // 错误已在 API 客户端处理
   } finally {
@@ -462,12 +513,69 @@ const syncGitLabWebhook = async (project: Project) => {
   }
 }
 
+const toggleWebhook = (webhookId: number) => {
+  const index = selectedWebhookIds.value.indexOf(webhookId)
+  if (index > -1) {
+    selectedWebhookIds.value.splice(index, 1)
+  } else {
+    selectedWebhookIds.value.push(webhookId)
+  }
+}
+
+const formatWebhookUrl = (url: string) => {
+  // 保留URL的主要部分，隐藏敏感的key参数
+  const keyIndex = url.indexOf('key=')
+  if (keyIndex > -1) {
+    // 保留key=之前的部分，加上省略号
+    return url.substring(0, keyIndex + 4) + '...'
+  }
+  // 如果没有key参数，返回原URL（但限制最大长度）
+  if (url.length > 60) {
+    return url.substring(0, 60) + '...'
+  }
+  return url
+}
+
+const goToWebhooks = () => {
+  webhookModalVisible.value = false
+  router.push('/webhooks')
+}
+
 onMounted(() => {
   loadProjects()
 })
 </script>
 
 <style scoped lang="less">
+.page-container {
+  padding: 20px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  
+  .page-title {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: #303133;
+    display: flex;
+    align-items: center;
+    
+    &::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
+      border-radius: 2px;
+      margin-right: 12px;
+    }
+  }
+}
+
 .mb-4 {
   margin-bottom: 16px;
 }
@@ -526,7 +634,6 @@ onMounted(() => {
     color: #303133;
     display: flex;
     align-items: center;
-    gap: 8px;
     
     &::before {
       content: '';
@@ -534,6 +641,7 @@ onMounted(() => {
       height: 16px;
       background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
       border-radius: 2px;
+      margin-right: 8px;
     }
   }
 }
@@ -544,6 +652,16 @@ onMounted(() => {
     
     .el-icon {
       margin-left: 4px;
+    }
+  }
+  
+  // 增加操作按钮的大小
+  .el-button {
+    font-size: 14px !important;
+    
+    .el-icon {
+      font-size: 16px !important;
+      margin-right: 4px;
     }
   }
 }
@@ -587,6 +705,133 @@ onMounted(() => {
         display: flex;
         align-items: center;
         flex: 1;
+      }
+    }
+  }
+}
+
+// Webhook管理对话框样式
+.webhook-manage-dialog {
+  .project-info-section {
+    margin-bottom: 24px;
+    padding: 20px;
+    background: linear-gradient(135deg, #f5f8ff 0%, #f0f4ff 100%);
+    border-radius: 10px;
+    border: 1px solid #e6e8eb;
+    
+    .project-label {
+      font-size: 13px;
+      color: #909399;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    
+    .project-details {
+      .project-name {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 20px;
+        font-weight: 600;
+        color: #303133;
+        margin-bottom: 6px;
+        
+        .el-icon {
+          font-size: 24px;
+          color: #409eff;
+        }
+      }
+      
+      .project-url {
+        font-size: 13px;
+        color: #606266;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+        padding-left: 34px;
+      }
+    }
+  }
+  
+  .webhook-selection {
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #303133;
+      margin-bottom: 16px;
+      padding-left: 4px;
+      border-left: 3px solid #409eff;
+      padding-left: 12px;
+    }
+    
+    .webhook-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      
+      .webhook-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid #e6e8eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+        position: relative;
+        
+        &:hover {
+          border-color: #409eff;
+          background: #f8f9fb;
+          box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+        }
+        
+        &.selected {
+          border-color: #409eff;
+          background: #ecf5ff;
+          box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+        }
+        
+        .webhook-checkbox {
+          margin-top: 2px;
+        }
+        
+        .webhook-content {
+          flex: 1;
+          
+          .webhook-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            
+            .webhook-icon {
+              font-size: 18px;
+              color: #409eff;
+            }
+            
+            .webhook-name {
+              font-size: 15px;
+              font-weight: 500;
+              color: #303133;
+            }
+          }
+          
+          .webhook-url {
+            font-size: 12px;
+            color: #909399;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+            word-break: break-all;
+            line-height: 1.4;
+            padding-left: 26px;
+          }
+        }
+        
+        .selected-tag {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+        }
       }
     }
   }

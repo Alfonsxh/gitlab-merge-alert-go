@@ -3,19 +3,22 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Host                      string `mapstructure:"host"`
-	Port                      int    `mapstructure:"port"`
-	Environment               string `mapstructure:"environment"`
-	LogLevel                  string `mapstructure:"log_level"`
-	DatabasePath              string `mapstructure:"database_path"`
-	GitLabURL                 string `mapstructure:"gitlab_url" json:"-"` // 敏感字段不输出到日志
-	PublicWebhookURL          string `mapstructure:"public_webhook_url"`
-	GitLabPersonalAccessToken string `mapstructure:"gitlab_personal_access_token" json:"-"` // 敏感字段不输出到日志
+	Host                      string        `mapstructure:"host"`
+	Port                      int           `mapstructure:"port"`
+	Environment               string        `mapstructure:"environment"`
+	LogLevel                  string        `mapstructure:"log_level"`
+	DatabasePath              string        `mapstructure:"database_path"`
+	GitLabURL                 string        `mapstructure:"gitlab_url" json:"-"` // 敏感字段不输出到日志
+	PublicWebhookURL          string        `mapstructure:"public_webhook_url"`
+	GitLabPersonalAccessToken string        `mapstructure:"gitlab_personal_access_token" json:"-"` // 敏感字段不输出到日志
+	JWTSecret                 string        `mapstructure:"jwt_secret" json:"-"`                   // JWT 密钥
+	JWTDuration               time.Duration `mapstructure:"jwt_duration"`                          // JWT 过期时间
 }
 
 // MaskSensitive 返回一个掩码后的配置副本，用于日志输出
@@ -26,6 +29,9 @@ func (c *Config) MaskSensitive() Config {
 	}
 	if masked.GitLabPersonalAccessToken != "" {
 		masked.GitLabPersonalAccessToken = "****"
+	}
+	if masked.JWTSecret != "" {
+		masked.JWTSecret = "****"
 	}
 	return masked
 }
@@ -59,6 +65,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("log_level", "info")
 	viper.SetDefault("database_path", "./data/gitlab-merge-alert.db")
+	viper.SetDefault("jwt_duration", "24h")
 
 	// 环境变量绑定（优先级最高）
 	viper.SetEnvPrefix("GMA")

@@ -55,18 +55,61 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="关联项目" width="200">
+        <el-table-column label="关联项目" width="300">
           <template #default="{ row }">
-            <el-space v-if="row.projects?.length" wrap>
-              <el-tag
-                v-for="project in row.projects"
-                :key="project.id"
-                size="small"
-                type="info"
+            <div v-if="row.projects?.length" class="project-tags">
+              <el-popover
+                v-if="row.projects.length > 3"
+                placement="top"
+                trigger="hover"
+                width="400"
               >
-                {{ project.name }}
-              </el-tag>
-            </el-space>
+                <template #reference>
+                  <div class="project-tags-compact">
+                    <el-tag
+                      v-for="project in row.projects.slice(0, 3)"
+                      :key="project.id"
+                      size="small"
+                      type="info"
+                      class="project-tag"
+                      @click="goToProject(project)"
+                    >
+                      {{ project.name }}
+                    </el-tag>
+                    <el-tag size="small" type="warning">
+                      +{{ row.projects.length - 3 }}
+                    </el-tag>
+                  </div>
+                </template>
+                <div class="project-list-popover">
+                  <div class="popover-title">所有关联项目 ({{ row.projects.length }})</div>
+                  <div class="project-list">
+                    <el-tag
+                      v-for="project in row.projects"
+                      :key="project.id"
+                      size="small"
+                      type="info"
+                      class="project-tag"
+                      @click="goToProject(project)"
+                    >
+                      {{ project.name }}
+                    </el-tag>
+                  </div>
+                </div>
+              </el-popover>
+              <div v-else class="project-tags-compact">
+                <el-tag
+                  v-for="project in row.projects"
+                  :key="project.id"
+                  size="small"
+                  type="info"
+                  class="project-tag"
+                  @click="goToProject(project)"
+                >
+                  {{ project.name }}
+                </el-tag>
+              </div>
+            </div>
             <span v-else class="text-muted">无</span>
           </template>
         </el-table-column>
@@ -77,7 +120,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="testWebhook(row)">
               <el-icon><VideoPlay /></el-icon>
@@ -213,6 +256,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
+import { useRouter } from 'vue-router'
 import {
   Plus,
   Edit,
@@ -227,6 +271,7 @@ import { webhooksApi } from '@/api'
 import type { Webhook } from '@/api'
 import { formatDate } from '@/utils/format'
 
+const router = useRouter()
 const webhooks = ref<Webhook[]>([])
 const loading = ref(false)
 const modalVisible = ref(false)
@@ -356,6 +401,11 @@ const sendTestMessage = async () => {
   }
 }
 
+const goToProject = (_project: any) => {
+  // 跳转到项目管理页面
+  router.push('/projects')
+}
+
 onMounted(() => {
   loadWebhooks()
 })
@@ -402,6 +452,67 @@ onMounted(() => {
       background: #f5f7fa;
       padding: 2px 8px;
       border-radius: 4px;
+    }
+  }
+  
+  // 增加操作按钮的大小
+  .el-button {
+    font-size: 14px !important;
+    
+    .el-icon {
+      font-size: 16px !important;
+    }
+  }
+}
+
+// 项目标签样式
+.project-tags {
+  .project-tags-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  
+  .project-tag {
+    cursor: pointer;
+    transition: all 0.3s;
+    
+    &:hover {
+      background-color: #409eff;
+      color: #fff;
+      border-color: #409eff;
+    }
+  }
+}
+
+// 弹出框中的项目列表
+.project-list-popover {
+  .popover-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #303133;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e6e8eb;
+  }
+  
+  .project-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    
+    .project-tag {
+      cursor: pointer;
+      transition: all 0.3s;
+      
+      &:hover {
+        background-color: #409eff;
+        color: #fff;
+        border-color: #409eff;
+      }
     }
   }
 }

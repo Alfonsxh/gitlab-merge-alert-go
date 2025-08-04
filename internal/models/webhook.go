@@ -10,6 +10,7 @@ type Webhook struct {
 	URL         string    `json:"url" gorm:"column:url;not null;default:''"`
 	Description string    `json:"description" gorm:"column:description"`
 	IsActive    bool      `json:"is_active" gorm:"column:is_active;default:true"`
+	CreatedBy   *uint     `json:"created_by,omitempty" gorm:"column:created_by;index"`
 	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt   time.Time `json:"updated_at" gorm:"column:updated_at"`
 

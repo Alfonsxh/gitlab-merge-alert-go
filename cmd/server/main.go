@@ -50,6 +50,11 @@ func main() {
 
 	// 初始化处理器
 	h := handlers.New(db, cfg)
+	
+	// 初始化默认管理员账户
+	if err := h.InitializeAdminAccount(); err != nil {
+		log.Fatalf("Failed to initialize admin account: %v", err)
+	}
 
 	// 注册路由
 	setupRoutes(router, h)
@@ -62,7 +67,99 @@ func main() {
 }
 
 func setupRoutes(router *gin.Engine, h *handlers.Handler) {
-	// 配置 SPA 路由
+	// API路由
+	api := router.Group("/api/v1")
+	{
+		// 公开路由（无需认证）
+		// 认证相关
+		auth := api.Group("/auth")
+		{
+			auth.POST("/login", h.Login)
+			auth.POST("/logout", h.Logout)
+			auth.POST("/refresh", h.RefreshToken)
+		}
+		
+		// GitLab Webhook接收（无需认证，使用 webhook 自身的验证）
+		api.POST("/webhook/gitlab", h.HandleGitLabWebhook)
+		
+		// 需要认证的路由
+		protected := api.Group("")
+		protected.Use(h.GetAuthMiddleware().RequireAuth())
+		{
+			// 认证相关
+			authProtected := protected.Group("/auth")
+			{
+				authProtected.GET("/profile", h.GetProfile)
+				authProtected.PUT("/password", h.ChangePassword)
+			}
+
+			// 账户管理（仅管理员）
+			admin := protected.Group("")
+			admin.Use(h.GetAuthMiddleware().RequireAdmin())
+			{
+				accounts := admin.Group("/accounts")
+				{
+					accounts.GET("", h.GetAccounts)
+					accounts.POST("", h.CreateAccount)
+					accounts.PUT("/:id", h.UpdateAccount)
+					accounts.DELETE("/:id", h.DeleteAccount)
+					accounts.PUT("/:id/password", h.ResetPassword)
+				}
+			}
+
+			// 用户管理API（GitLab 用户映射）
+			users := protected.Group("/users")
+			{
+				users.GET("", h.GetUsers)
+				users.POST("", h.CreateUser)
+				users.PUT("/:id", h.UpdateUser).Use(h.GetOwnershipChecker().CheckUserOwnership())
+				users.DELETE("/:id", h.DeleteUser).Use(h.GetOwnershipChecker().CheckUserOwnership())
+			}
+
+			// 项目管理API
+			projects := protected.Group("/projects")
+			{
+				projects.GET("", h.GetProjects)
+				projects.POST("", h.CreateProject)
+				projects.PUT("/:id", h.UpdateProject).Use(h.GetOwnershipChecker().CheckProjectOwnership())
+				projects.DELETE("/:id", h.DeleteProject).Use(h.GetOwnershipChecker().CheckProjectOwnership())
+				projects.POST("/parse-url", h.ParseProjectURL)
+				projects.POST("/scan-group", h.ScanGroupProjects)
+				projects.POST("/batch-create", h.BatchCreateProjects)
+
+				// GitLab Webhook管理API
+				projects.POST("/:id/sync-gitlab-webhook", h.SyncGitLabWebhook).Use(h.GetOwnershipChecker().CheckProjectOwnership())
+				projects.DELETE("/:id/sync-gitlab-webhook", h.DeleteGitLabWebhook).Use(h.GetOwnershipChecker().CheckProjectOwnership())
+				projects.GET("/:id/gitlab-webhook-status", h.GetGitLabWebhookStatus).Use(h.GetOwnershipChecker().CheckProjectOwnership())
+			}
+
+			// GitLab相关API
+			gitlab := protected.Group("/gitlab")
+			{
+				gitlab.POST("/test-connection", h.TestGitLabConnection)
+				gitlab.GET("/config", h.GetGitLabConfig)
+			}
+
+			// Webhook管理API
+			webhooks := protected.Group("/webhooks")
+			{
+				webhooks.GET("", h.GetWebhooks)
+				webhooks.POST("", h.CreateWebhook)
+				webhooks.PUT("/:id", h.UpdateWebhook).Use(h.GetOwnershipChecker().CheckWebhookOwnership())
+				webhooks.DELETE("/:id", h.DeleteWebhook).Use(h.GetOwnershipChecker().CheckWebhookOwnership())
+			}
+
+			// 项目-Webhook关联API
+			protected.POST("/project-webhooks", h.LinkProjectWebhook)
+			protected.DELETE("/project-webhooks/:project_id/:webhook_id", h.UnlinkProjectWebhook)
+
+			// 统计API
+			protected.GET("/stats", h.GetStats)
+			protected.GET("/notifications", h.GetNotifications)
+		}
+	}
+	
+	// 配置 SPA 路由 - 必须在 API 路由之后定义
 	router.NoRoute(func(c *gin.Context) {
 		// API 路由不存在时返回 404
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
@@ -72,61 +169,4 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 		// 其他路由返回 index.html
 		c.File("./frontend/dist/index.html")
 	})
-
-	// API路由
-	api := router.Group("/api/v1")
-	{
-		// GitLab Webhook接收
-		api.POST("/webhook/gitlab", h.HandleGitLabWebhook)
-
-		// 用户管理API
-		users := api.Group("/users")
-		{
-			users.GET("", h.GetUsers)
-			users.POST("", h.CreateUser)
-			users.PUT("/:id", h.UpdateUser)
-			users.DELETE("/:id", h.DeleteUser)
-		}
-
-		// 项目管理API
-		projects := api.Group("/projects")
-		{
-			projects.GET("", h.GetProjects)
-			projects.POST("", h.CreateProject)
-			projects.PUT("/:id", h.UpdateProject)
-			projects.DELETE("/:id", h.DeleteProject)
-			projects.POST("/parse-url", h.ParseProjectURL)
-			projects.POST("/scan-group", h.ScanGroupProjects)
-			projects.POST("/batch-create", h.BatchCreateProjects)
-
-			// GitLab Webhook管理API
-			projects.POST("/:id/sync-gitlab-webhook", h.SyncGitLabWebhook)
-			projects.DELETE("/:id/sync-gitlab-webhook", h.DeleteGitLabWebhook)
-			projects.GET("/:id/gitlab-webhook-status", h.GetGitLabWebhookStatus)
-		}
-
-		// GitLab相关API
-		gitlab := api.Group("/gitlab")
-		{
-			gitlab.POST("/test-connection", h.TestGitLabConnection)
-			gitlab.GET("/config", h.GetGitLabConfig)
-		}
-
-		// Webhook管理API
-		webhooks := api.Group("/webhooks")
-		{
-			webhooks.GET("", h.GetWebhooks)
-			webhooks.POST("", h.CreateWebhook)
-			webhooks.PUT("/:id", h.UpdateWebhook)
-			webhooks.DELETE("/:id", h.DeleteWebhook)
-		}
-
-		// 项目-Webhook关联API
-		api.POST("/project-webhooks", h.LinkProjectWebhook)
-		api.DELETE("/project-webhooks/:project_id/:webhook_id", h.UnlinkProjectWebhook)
-
-		// 统计API
-		api.GET("/stats", h.GetStats)
-		api.GET("/notifications", h.GetNotifications)
-	}
 }

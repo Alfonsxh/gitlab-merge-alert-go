@@ -8,7 +8,21 @@
         </div>
         <div class="header-actions">
           <el-button :icon="Refresh" circle @click="handleRefresh" />
-          <el-button :icon="Setting" circle @click="handleSettings" />
+          <el-dropdown @command="handleCommand">
+            <div class="user-info">
+              <el-avatar :size="32" :icon="UserFilled" />
+              <span class="username">{{ authStore.username }}</span>
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item :icon="UserFilled" command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item :icon="Lock" command="changePassword">修改密码</el-dropdown-item>
+                <el-dropdown-item v-if="authStore.isAdmin" :icon="Setting" command="settings" divided>系统设置</el-dropdown-item>
+                <el-dropdown-item :icon="SwitchButton" command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </el-header>
@@ -41,6 +55,11 @@
             <el-icon><Link /></el-icon>
             <span>Webhook管理</span>
           </el-menu-item>
+          
+          <el-menu-item v-if="authStore.isAdmin" index="/accounts">
+            <el-icon><UserFilled /></el-icon>
+            <span>账户管理</span>
+          </el-menu-item>
         </el-menu>
         
         <div class="collapse-btn" @click="isCollapse = !isCollapse">
@@ -62,8 +81,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 import {
   Monitor,
   DataAnalysis,
@@ -73,10 +93,16 @@ import {
   Expand,
   Fold,
   Refresh,
-  Setting
+  Setting,
+  UserFilled,
+  Lock,
+  SwitchButton,
+  ArrowDown
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 const isCollapse = ref(false)
 
 const activeMenu = computed(() => route.path)
@@ -85,8 +111,28 @@ const handleRefresh = () => {
   location.reload()
 }
 
-const handleSettings = () => {
-  ElMessage.info('设置功能开发中...')
+const handleCommand = async (command: string) => {
+  switch (command) {
+    case 'profile':
+      router.push('/profile')
+      break
+    case 'changePassword':
+      router.push('/profile?tab=password')
+      break
+    case 'settings':
+      ElMessage.info('系统设置功能开发中...')
+      break
+    case 'logout':
+      await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+      await authStore.logout()
+      router.push('/login')
+      ElMessage.success('已退出登录')
+      break
+  }
 }
 </script>
 
@@ -122,7 +168,8 @@ const handleSettings = () => {
     
     .header-actions {
       display: flex;
-      gap: 10px;
+      gap: 15px;
+      align-items: center;
       
       :deep(.el-button) {
         background: rgba(255, 255, 255, 0.2);
@@ -131,6 +178,35 @@ const handleSettings = () => {
         
         &:hover {
           background: rgba(255, 255, 255, 0.3);
+        }
+      }
+      
+      .user-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        padding: 6px 12px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.2);
+        transition: all 0.3s;
+        
+        &:hover {
+          background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .username {
+          color: #fff;
+          font-size: 14px;
+          max-width: 150px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        
+        .el-icon--right {
+          color: #fff;
+          margin-left: 4px;
         }
       }
     }

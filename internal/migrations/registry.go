@@ -11,6 +11,8 @@ func GetAllMigrations() []Migration {
 		&Migration002FixNotNullConstraints{},
 		&Migration003FixGitLabWebhookIDColumnName{},
 		&Migration004AddGitLabUsernameToUsers{},
+		&Migration005CreateAccountsTable{},
+		&Migration006AddCreatedByFields{},
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -21,31 +22,42 @@ type Stats struct {
 func (h *Handler) GetStats(c *gin.Context) {
 	var stats Stats
 
+	// 应用所有权过滤
+	userQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.User{}), "users")
+	projectQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.Project{}), "projects")
+	webhookQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.Webhook{}), "webhooks")
+	notificationQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.Notification{}), "notifications")
+
 	// 统计用户数量
-	h.db.Model(&models.User{}).Count(&stats.TotalUsers)
+	userQuery.Count(&stats.TotalUsers)
 
 	// 统计项目数量
-	h.db.Model(&models.Project{}).Count(&stats.TotalProjects)
+	projectQuery.Count(&stats.TotalProjects)
 
 	// 统计Webhook数量
-	h.db.Model(&models.Webhook{}).Count(&stats.TotalWebhooks)
+	webhookQuery.Count(&stats.TotalWebhooks)
 
 	// 统计通知总数
-	h.db.Model(&models.Notification{}).Count(&stats.TotalNotifications)
+	notificationQuery.Count(&stats.TotalNotifications)
 
 	// 统计最近24小时的通知数量
 	yesterday := time.Now().Add(-24 * time.Hour)
-	h.db.Model(&models.Notification{}).Where("created_at > ?", yesterday).Count(&stats.RecentNotifications)
+	recentQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.Notification{}), "notifications")
+	recentQuery.Where("created_at > ?", yesterday).Count(&stats.RecentNotifications)
 
 	// 统计成功发送的通知数量
-	h.db.Model(&models.Notification{}).Where("notification_sent = ?", true).Count(&stats.SuccessfulNotifications)
+	successQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.Notification{}), "notifications")
+	successQuery.Where("notification_sent = ?", true).Count(&stats.SuccessfulNotifications)
 
 	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
 
 func (h *Handler) GetNotifications(c *gin.Context) {
 	var notifications []models.Notification
+	
+	// 应用所有权过滤
 	query := h.db.Preload("Project").Order("created_at DESC")
+	query = middleware.ApplyOwnershipFilter(c, query, "notifications")
 
 	// 简单分页实现
 	query = query.Limit(20)
@@ -56,7 +68,7 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 	}
 
 	// 转换为响应格式
-	var responses []models.NotificationResponse
+	responses := make([]models.NotificationResponse, 0) // 确保是空数组而不是nil
 	for _, notification := range notifications {
 		var assigneeEmails []string
 		// 简单解析JSON字符串，实际应该使用json.Unmarshal

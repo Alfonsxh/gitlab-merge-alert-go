@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
 	"gitlab-merge-alert-go/internal/services"
 	"gitlab-merge-alert-go/pkg/logger"
@@ -18,13 +19,18 @@ import (
 
 func (h *Handler) GetProjects(c *gin.Context) {
 	var projects []models.Project
-	if err := h.db.Preload("Webhooks").Find(&projects).Error; err != nil {
+	
+	// 应用所有权过滤
+	query := h.db.Preload("Webhooks")
+	query = middleware.ApplyOwnershipFilter(c, query, "projects")
+	
+	if err := query.Find(&projects).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
 		return
 	}
 
 	// 转换为响应格式
-	var responses []models.ProjectResponse
+	responses := make([]models.ProjectResponse, 0) // 确保是空数组而不是nil
 	for _, project := range projects {
 		response := models.ProjectResponse{
 			ID:                project.ID,
@@ -98,6 +104,9 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户ID
+	accountID, _ := middleware.GetAccountID(c)
+	
 	// 创建新项目
 	project := &models.Project{
 		GitLabProjectID:   req.GitLabProjectID,
@@ -107,6 +116,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		AccessToken:       req.AccessToken,
 		AutoManageWebhook: autoManageWebhook,
 		WebhookSynced:     false,
+		CreatedBy:         &accountID,
 	}
 
 	if err := h.db.Create(project).Error; err != nil {
@@ -458,6 +468,9 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户ID
+	accountID, _ := middleware.GetAccountID(c)
+
 	var results []models.BatchProjectResult
 	successCount := 0
 	failureCount := 0
@@ -480,6 +493,7 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 				URL:         req.WebhookConfig.NewWebhook.URL,
 				Description: req.WebhookConfig.NewWebhook.Description,
 				IsActive:    true,
+				CreatedBy:   &accountID,
 			}
 			if req.WebhookConfig.NewWebhook.IsActive != nil {
 				webhook.IsActive = *req.WebhookConfig.NewWebhook.IsActive
@@ -534,6 +548,7 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 			AccessToken:       req.AccessToken,
 			AutoManageWebhook: true, // 批量创建时默认启用自动管理
 			WebhookSynced:     false,
+			CreatedBy:         &accountID,
 		}
 
 		if err := tx.Create(project).Error; err != nil {
