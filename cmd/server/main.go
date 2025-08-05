@@ -156,6 +156,8 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			// 统计API
 			protected.GET("/stats", h.GetStats)
 			protected.GET("/notifications", h.GetNotifications)
+			protected.GET("/stats/projects/daily", h.GetProjectDailyStats)
+			protected.GET("/stats/webhooks/daily", h.GetWebhookDailyStats)
 		}
 	}
 	

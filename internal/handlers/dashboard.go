@@ -95,3 +95,190 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": responses})
 }
+
+// DailyStats represents daily statistics
+type DailyStats struct {
+	Date  string `json:"date"`
+	Count int64  `json:"count"`
+}
+
+// ProjectDailyStats represents daily stats for a project
+type ProjectDailyStats struct {
+	ProjectID   uint         `json:"project_id"`
+	ProjectName string       `json:"project_name"`
+	Data        []DailyStats `json:"data"`
+}
+
+// WebhookDailyStats represents daily stats for a webhook
+type WebhookDailyStats struct {
+	WebhookID   uint         `json:"webhook_id"`
+	WebhookName string       `json:"webhook_name"`
+	Data        []DailyStats `json:"data"`
+}
+
+// GetProjectDailyStats returns daily merge request statistics per project
+func (h *Handler) GetProjectDailyStats(c *gin.Context) {
+	// Get days parameter (default 7 days)
+	days := 7
+	if d := c.Query("days"); d != "" {
+		if parsed, err := time.ParseDuration(d + "d"); err == nil {
+			days = int(parsed.Hours() / 24)
+		}
+	}
+
+	// Calculate date range
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -days)
+
+	// Get all projects
+	var projects []models.Project
+	projectQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.Project{}), "projects")
+	if err := projectQuery.Find(&projects).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
+		return
+	}
+
+	// Prepare result
+	result := make([]ProjectDailyStats, 0)
+
+	// For each project, get daily stats
+	for _, project := range projects {
+		var dailyStats []DailyStats
+
+		// Query notifications grouped by date
+		query := h.db.Model(&models.Notification{}).
+			Select("DATE(created_at) as date, COUNT(*) as count").
+			Where("project_id = ? AND created_at >= ? AND created_at <= ?", project.ID, startDate, endDate).
+			Group("DATE(created_at)").
+			Order("date ASC")
+
+		// Apply ownership filter
+		query = middleware.ApplyOwnershipFilter(c, query, "notifications")
+
+		// Execute query
+		rows, err := query.Rows()
+		if err != nil {
+			continue
+		}
+		defer rows.Close()
+
+		// Parse results
+		for rows.Next() {
+			var stat DailyStats
+			if err := rows.Scan(&stat.Date, &stat.Count); err == nil {
+				dailyStats = append(dailyStats, stat)
+			}
+		}
+
+		// Fill missing dates with zero
+		dailyStats = fillMissingDates(dailyStats, startDate, endDate)
+
+		result = append(result, ProjectDailyStats{
+			ProjectID:   project.ID,
+			ProjectName: project.Name,
+			Data:        dailyStats,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+// GetWebhookDailyStats returns daily merge request statistics per webhook
+func (h *Handler) GetWebhookDailyStats(c *gin.Context) {
+	// Get days parameter (default 7 days)
+	days := 7
+	if d := c.Query("days"); d != "" {
+		if parsed, err := time.ParseDuration(d + "d"); err == nil {
+			days = int(parsed.Hours() / 24)
+		}
+	}
+
+	// Calculate date range
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -days)
+
+	// Get all webhooks
+	var webhooks []models.Webhook
+	webhookQuery := middleware.ApplyOwnershipFilter(c, h.db.Model(&models.Webhook{}), "webhooks")
+	if err := webhookQuery.Find(&webhooks).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch webhooks"})
+		return
+	}
+
+	// Prepare result
+	result := make([]WebhookDailyStats, 0)
+
+	// For each webhook, get daily stats through project associations
+	for _, webhook := range webhooks {
+		var dailyStats []DailyStats
+
+		// Get projects associated with this webhook
+		var projectIDs []uint
+		h.db.Table("project_webhooks").
+			Where("webhook_id = ?", webhook.ID).
+			Pluck("project_id", &projectIDs)
+
+		if len(projectIDs) > 0 {
+			// Query notifications grouped by date for projects associated with this webhook
+			query := h.db.Model(&models.Notification{}).
+				Select("DATE(created_at) as date, COUNT(*) as count").
+				Where("project_id IN ? AND created_at >= ? AND created_at <= ?", projectIDs, startDate, endDate).
+				Group("DATE(created_at)").
+				Order("date ASC")
+
+			// Apply ownership filter
+			query = middleware.ApplyOwnershipFilter(c, query, "notifications")
+
+			// Execute query
+			rows, err := query.Rows()
+			if err != nil {
+				continue
+			}
+			defer rows.Close()
+
+			// Parse results
+			for rows.Next() {
+				var stat DailyStats
+				if err := rows.Scan(&stat.Date, &stat.Count); err == nil {
+					dailyStats = append(dailyStats, stat)
+				}
+			}
+		}
+
+		// Fill missing dates with zero
+		dailyStats = fillMissingDates(dailyStats, startDate, endDate)
+
+		result = append(result, WebhookDailyStats{
+			WebhookID:   webhook.ID,
+			WebhookName: webhook.Name,
+			Data:        dailyStats,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+// fillMissingDates fills missing dates in the stats with zero values
+func fillMissingDates(stats []DailyStats, startDate, endDate time.Time) []DailyStats {
+	// Create a map for quick lookup
+	statsMap := make(map[string]int64)
+	for _, stat := range stats {
+		statsMap[stat.Date] = stat.Count
+	}
+
+	// Create complete date range
+	var result []DailyStats
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		count := int64(0)
+		if c, exists := statsMap[dateStr]; exists {
+			count = c
+		}
+		result = append(result, DailyStats{
+			Date:  dateStr,
+			Count: count,
+		})
+	}
+
+	return result
+}
