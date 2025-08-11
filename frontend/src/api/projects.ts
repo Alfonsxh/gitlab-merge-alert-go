@@ -14,8 +14,8 @@ export interface Project {
 }
 
 export const projectsApi = {
-  getProjects() {
-    return apiClient.get<any, { data: Project[] }>('/projects')
+  getProjects(params?: { page?: number; page_size?: number }) {
+    return apiClient.get<any, { data: Project[]; total: number }>('/projects', { params })
   },
 
   createProject(project: Partial<Project>) {

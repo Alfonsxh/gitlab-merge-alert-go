@@ -11,8 +11,8 @@ export interface User {
 }
 
 export const usersApi = {
-  getUsers() {
-    return apiClient.get<any, { data: User[] }>('/users')
+  getUsers(params?: { page?: number; page_size?: number }) {
+    return apiClient.get<any, { data: User[]; total: number }>('/users', { params })
   },
 
   createUser(user: Partial<User>) {

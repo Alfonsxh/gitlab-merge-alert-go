@@ -10,6 +10,7 @@ type Account struct {
 	PasswordHash string    `json:"-" gorm:"column:password_hash;not null"`
 	Email        string    `json:"email" gorm:"column:email;uniqueIndex;not null"`
 	Role         string    `json:"role" gorm:"column:role;default:'user'"`
+	Avatar       string    `json:"avatar" gorm:"column:avatar;type:text"`
 	IsActive     bool      `json:"is_active" gorm:"column:is_active;default:true"`
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty" gorm:"column:last_login_at"`
 	CreatedAt    time.Time `json:"created_at" gorm:"column:created_at"`
@@ -55,10 +56,16 @@ type AccountResponse struct {
 	Username    string     `json:"username"`
 	Email       string     `json:"email"`
 	Role        string     `json:"role"`
+	Avatar      string     `json:"avatar"`
 	IsActive    bool       `json:"is_active"`
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+type UpdateProfileRequest struct {
+	Email  string `json:"email" binding:"omitempty,email"`
+	Avatar string `json:"avatar"`
 }
 
 func (a *Account) IsAdmin() bool {
@@ -71,6 +78,7 @@ func (a *Account) ToResponse() *AccountResponse {
 		Username:    a.Username,
 		Email:       a.Email,
 		Role:        a.Role,
+		Avatar:      a.Avatar,
 		IsActive:    a.IsActive,
 		LastLoginAt: a.LastLoginAt,
 		CreatedAt:   a.CreatedAt,

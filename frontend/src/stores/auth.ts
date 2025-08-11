@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authAPI } from '@/api/auth'
 import type { AccountResponse, LoginResponse } from '@/api/types/auth'
+import { setFaviconFromAvatar } from '@/utils/favicon'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
@@ -19,6 +20,10 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authAPI.login({ username, password })
       setAuthData(response)
       await fetchProfile()
+      // 设置用户头像为 favicon
+      if (user.value?.avatar) {
+        setFaviconFromAvatar(user.value.avatar)
+      }
     } catch (error) {
       clearAuthData()
       throw error
@@ -32,6 +37,8 @@ export const useAuthStore = defineStore('auth', () => {
       console.error('Logout error:', error)
     } finally {
       clearAuthData()
+      // 重置为默认 favicon
+      setFaviconFromAvatar(null)
     }
   }
 
@@ -43,6 +50,10 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const profile = await authAPI.getProfile()
       user.value = profile
+      // 更新 favicon
+      if (profile.avatar) {
+        setFaviconFromAvatar(profile.avatar)
+      }
     } catch (error) {
       if ((error as any).response?.status === 401) {
         clearAuthData()

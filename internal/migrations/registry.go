@@ -13,6 +13,7 @@ func GetAllMigrations() []Migration {
 		&Migration004AddGitLabUsernameToUsers{},
 		&Migration005CreateAccountsTable{},
 		&Migration006AddCreatedByFields{},
+		&Migration007{},
 	}
 }
 

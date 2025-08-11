@@ -12,8 +12,8 @@ export interface Webhook {
 }
 
 export const webhooksApi = {
-  getWebhooks() {
-    return apiClient.get<any, { data: Webhook[] }>('/webhooks')
+  getWebhooks(params?: { page?: number; page_size?: number }) {
+    return apiClient.get<any, { data: Webhook[]; total: number }>('/webhooks', { params })
   },
 
   createWebhook(webhook: Partial<Webhook>) {

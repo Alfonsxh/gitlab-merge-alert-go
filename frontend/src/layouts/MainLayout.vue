@@ -10,7 +10,12 @@
           <el-button :icon="Refresh" circle @click="handleRefresh" />
           <el-dropdown @command="handleCommand">
             <div class="user-info">
-              <el-avatar :size="32" :icon="UserFilled" />
+              <el-avatar 
+                :size="32" 
+                :src="(authStore.user as any)?.avatar || ''"
+              >
+                <el-icon :size="20"><UserFilled /></el-icon>
+              </el-avatar>
               <span class="username">{{ authStore.username }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </div>
@@ -18,7 +23,6 @@
               <el-dropdown-menu>
                 <el-dropdown-item :icon="UserFilled" command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item :icon="Lock" command="changePassword">修改密码</el-dropdown-item>
-                <el-dropdown-item v-if="authStore.isAdmin" :icon="Setting" command="settings" divided>系统设置</el-dropdown-item>
                 <el-dropdown-item :icon="SwitchButton" command="logout" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -93,7 +97,6 @@ import {
   Expand,
   Fold,
   Refresh,
-  Setting,
   UserFilled,
   Lock,
   SwitchButton,
@@ -118,9 +121,6 @@ const handleCommand = async (command: string) => {
       break
     case 'changePassword':
       router.push('/profile?tab=password')
-      break
-    case 'settings':
-      ElMessage.info('系统设置功能开发中...')
       break
     case 'logout':
       await ElMessageBox.confirm('确定要退出登录吗？', '提示', {

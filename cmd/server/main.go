@@ -90,7 +90,9 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			authProtected := protected.Group("/auth")
 			{
 				authProtected.GET("/profile", h.GetProfile)
-				authProtected.PUT("/password", h.ChangePassword)
+				authProtected.PUT("/profile", h.UpdateProfile)
+				authProtected.POST("/avatar", h.UploadAvatar)
+				authProtected.POST("/change-password", h.ChangePassword)
 			}
 
 			// 账户管理（仅管理员）
@@ -152,6 +154,17 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			// 项目-Webhook关联API
 			protected.POST("/project-webhooks", h.LinkProjectWebhook)
 			protected.DELETE("/project-webhooks/:project_id/:webhook_id", h.UnlinkProjectWebhook)
+
+			// 资源管理API（仅管理员）
+			resourceManager := protected.Group("/resource-managers")
+			resourceManager.Use(h.GetAuthMiddleware().RequireAdmin())
+			{
+				resourceManager.POST("/assign", h.AssignManager)
+				resourceManager.POST("/remove", h.RemoveManager)
+				resourceManager.GET("", h.GetResourceManagers)
+				resourceManager.GET("/managed/:id", h.GetManagedResources)
+				resourceManager.POST("/batch-assign/:id", h.BatchAssignResources)
+			}
 
 			// 统计API
 			protected.GET("/stats", h.GetStats)

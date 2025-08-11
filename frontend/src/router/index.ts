@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import MainLayout from '@/layouts/MainLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { setFaviconFromAvatar } from '@/utils/favicon'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -80,6 +81,7 @@ router.beforeEach(async (to, _from, next) => {
     // 检查是否已认证
     if (!authStore.isAuthenticated) {
       // 未认证，跳转到登录页
+      setFaviconFromAvatar(null) // 重置为默认 favicon
       return next({
         path: '/login',
         query: { redirect: to.fullPath }
@@ -89,6 +91,7 @@ router.beforeEach(async (to, _from, next) => {
     // 检查Token是否过期
     if (!authStore.checkTokenExpiry()) {
       // Token过期，跳转到登录页
+      setFaviconFromAvatar(null) // 重置为默认 favicon
       return next({
         path: '/login',
         query: { redirect: to.fullPath }
@@ -101,6 +104,7 @@ router.beforeEach(async (to, _from, next) => {
         await authStore.fetchProfile()
       } catch (error) {
         // 获取用户信息失败，跳转到登录页
+        setFaviconFromAvatar(null) // 重置为默认 favicon
         return next({
           path: '/login',
           query: { redirect: to.fullPath }
@@ -108,11 +112,19 @@ router.beforeEach(async (to, _from, next) => {
       }
     }
     
+    // 设置用户头像为 favicon
+    if (authStore.user?.avatar) {
+      setFaviconFromAvatar(authStore.user.avatar)
+    }
+    
     // 检查管理员权限
     if (requiresAdmin && !authStore.isAdmin) {
       // 没有管理员权限，跳转到首页
       return next('/')
     }
+  } else {
+    // 登录页面，重置为默认 favicon
+    setFaviconFromAvatar(null)
   }
   
   // 已登录用户访问登录页，重定向到首页

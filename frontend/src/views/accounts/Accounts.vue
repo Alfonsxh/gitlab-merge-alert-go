@@ -68,7 +68,7 @@
           {{ formatDateTime(row.created_at) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <el-button
             type="primary"
@@ -77,6 +77,14 @@
             @click="handleEdit(row)"
           >
             编辑
+          </el-button>
+          <el-button
+            type="success"
+            size="small"
+            link
+            @click="handleAssignResources(row)"
+          >
+            分配资源
           </el-button>
           <el-button
             type="warning"
@@ -224,6 +232,126 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 资源分配对话框 -->
+    <el-dialog
+      v-model="showAssignDialog"
+      title="资源分配"
+      width="800px"
+      destroy-on-close
+    >
+      <div class="assign-header">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="账户">
+            {{ assignForm.username }}
+          </el-descriptions-item>
+          <el-descriptions-item label="角色">
+            <el-tag :type="assignForm.role === 'admin' ? 'danger' : 'primary'">
+              {{ assignForm.role === 'admin' ? '管理员' : '普通用户' }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <el-tabs v-model="activeResourceTab" class="resource-tabs">
+        <el-tab-pane label="项目管理权限" name="projects">
+          <div class="resource-section">
+            <div class="section-header">
+              <span>选择该账户可以管理的项目</span>
+              <el-button size="small" @click="selectAllProjects">全选</el-button>
+              <el-button size="small" @click="clearAllProjects">清空</el-button>
+            </div>
+            <el-transfer
+              v-model="assignedProjects"
+              :data="projectList"
+              :titles="['可选项目', '已分配项目']"
+              :props="{
+                key: 'id',
+                label: 'name',
+                disabled: 'disabled'
+              }"
+              filterable
+              filter-placeholder="搜索项目"
+            >
+              <template #default="{ option }">
+                <span>{{ option.name }}</span>
+                <el-tag v-if="option.assigned_to && option.assigned_to !== assignForm.id" 
+                  type="info" size="small" style="margin-left: 8px">
+                  已分配给: {{ option.assigned_to_name }}
+                </el-tag>
+              </template>
+            </el-transfer>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="Webhook管理权限" name="webhooks">
+          <div class="resource-section">
+            <div class="section-header">
+              <span>选择该账户可以管理的Webhook</span>
+              <el-button size="small" @click="selectAllWebhooks">全选</el-button>
+              <el-button size="small" @click="clearAllWebhooks">清空</el-button>
+            </div>
+            <el-transfer
+              v-model="assignedWebhooks"
+              :data="webhookList"
+              :titles="['可选Webhook', '已分配Webhook']"
+              :props="{
+                key: 'id',
+                label: 'name',
+                disabled: 'disabled'
+              }"
+              filterable
+              filter-placeholder="搜索Webhook"
+            >
+              <template #default="{ option }">
+                <span>{{ option.name }}</span>
+                <el-tag v-if="option.assigned_to && option.assigned_to !== assignForm.id" 
+                  type="info" size="small" style="margin-left: 8px">
+                  已分配给: {{ option.assigned_to_name }}
+                </el-tag>
+              </template>
+            </el-transfer>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="用户管理权限" name="users">
+          <div class="resource-section">
+            <div class="section-header">
+              <span>选择该账户可以管理的用户</span>
+              <el-button size="small" @click="selectAllUsers">全选</el-button>
+              <el-button size="small" @click="clearAllUsers">清空</el-button>
+            </div>
+            <el-transfer
+              v-model="assignedUsers"
+              :data="userList"
+              :titles="['可选用户', '已分配用户']"
+              :props="{
+                key: 'id',
+                label: 'name',
+                disabled: 'disabled'
+              }"
+              filterable
+              filter-placeholder="搜索用户"
+            >
+              <template #default="{ option }">
+                <span>{{ option.name }}</span>
+                <el-tag v-if="option.assigned_to && option.assigned_to !== assignForm.id" 
+                  type="info" size="small" style="margin-left: 8px">
+                  已分配给: {{ option.assigned_to_name }}
+                </el-tag>
+              </template>
+            </el-transfer>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+
+      <template #footer>
+        <el-button @click="showAssignDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleSaveAssignment" :loading="assignLoading">
+          保存分配
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -233,6 +361,10 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Plus } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { accountAPI } from '@/api/auth'
+import { projectsApi } from '@/api/projects'
+import { webhooksApi } from '@/api/webhooks'
+import { usersApi } from '@/api/users'
+import { resourceManagerAPI } from '@/api/resource-manager'
 import type { AccountResponse } from '@/api/types/auth'
 
 const authStore = useAuthStore()
@@ -300,6 +432,22 @@ const editRules = reactive<FormRules>({
     { required: true, message: '请选择角色', trigger: 'change' }
   ]
 })
+
+// 资源分配
+const showAssignDialog = ref(false)
+const assignLoading = ref(false)
+const activeResourceTab = ref('projects')
+const assignForm = reactive({
+  id: 0,
+  username: '',
+  role: ''
+})
+const projectList = ref<any[]>([])
+const webhookList = ref<any[]>([])
+const userList = ref<any[]>([])
+const assignedProjects = ref<number[]>([])
+const assignedWebhooks = ref<number[]>([])
+const assignedUsers = ref<number[]>([])
 
 // 重置密码
 const showResetPasswordDialog = ref(false)
@@ -439,6 +587,207 @@ const handleResetPasswordConfirm = async () => {
   })
 }
 
+// 资源分配
+const handleAssignResources = async (row: AccountResponse) => {
+  assignForm.id = row.id
+  assignForm.username = row.username
+  assignForm.role = row.role
+  
+  // 加载资源列表
+  await loadResourceLists()
+  
+  // 加载所有资源的分配情况
+  await loadAllResourceAssignments()
+  
+  // 加载已分配的资源
+  await loadAssignedResources(row.id)
+  
+  showAssignDialog.value = true
+}
+
+// 加载所有资源的分配情况
+const loadAllResourceAssignments = async () => {
+  try {
+    // 获取所有账户的资源分配情况
+    const accounts = await accountAPI.getAccounts({ page_size: 1000 })
+    
+    // 为每个资源标记是否已分配及分配给谁
+    const projectAssignments = new Map<number, { id: number, name: string }>()
+    const webhookAssignments = new Map<number, { id: number, name: string }>()
+    const userAssignments = new Map<number, { id: number, name: string }>()
+    
+    // 并行获取所有账户的资源分配
+    await Promise.all(accounts.data.map(async (account: any) => {
+      if (account.id === assignForm.id) return // 跳过当前账户
+      
+      const [projects, webhooks, users] = await Promise.all([
+        resourceManagerAPI.getManagedResources(account.id, 'project').catch(() => ({ resource_ids: [] })),
+        resourceManagerAPI.getManagedResources(account.id, 'webhook').catch(() => ({ resource_ids: [] })),
+        resourceManagerAPI.getManagedResources(account.id, 'user').catch(() => ({ resource_ids: [] }))
+      ])
+      
+      projects.resource_ids?.forEach((id: number) => {
+        projectAssignments.set(id, { id: account.id, name: account.username })
+      })
+      webhooks.resource_ids?.forEach((id: number) => {
+        webhookAssignments.set(id, { id: account.id, name: account.username })
+      })
+      users.resource_ids?.forEach((id: number) => {
+        userAssignments.set(id, { id: account.id, name: account.username })
+      })
+    }))
+    
+    // 更新资源列表的分配状态
+    projectList.value = projectList.value.map(p => ({
+      ...p,
+      disabled: projectAssignments.has(p.id),
+      assigned_to: projectAssignments.get(p.id)?.id,
+      assigned_to_name: projectAssignments.get(p.id)?.name
+    }))
+    
+    webhookList.value = webhookList.value.map(w => ({
+      ...w,
+      disabled: webhookAssignments.has(w.id),
+      assigned_to: webhookAssignments.get(w.id)?.id,
+      assigned_to_name: webhookAssignments.get(w.id)?.name
+    }))
+    
+    userList.value = userList.value.map(u => ({
+      ...u,
+      disabled: userAssignments.has(u.id),
+      assigned_to: userAssignments.get(u.id)?.id,
+      assigned_to_name: userAssignments.get(u.id)?.name
+    }))
+  } catch (error) {
+    console.error('Failed to load resource assignments:', error)
+  }
+}
+
+const loadResourceLists = async () => {
+  try {
+    // 并行加载所有资源列表
+    const [projects, webhooks, users] = await Promise.all([
+      projectsApi.getProjects({ page_size: 1000 }), // 获取所有资源
+      webhooksApi.getWebhooks({ page_size: 1000 }),
+      usersApi.getUsers({ page_size: 1000 })
+    ])
+    
+    projectList.value = projects.data.map((p: any) => ({
+      id: p.id,
+      name: p.name || p.path,
+      disabled: false // 标记资源是否已分配给其他账户
+    }))
+    
+    webhookList.value = webhooks.data.map((w: any) => ({
+      id: w.id,
+      name: w.name,
+      disabled: false
+    }))
+    
+    userList.value = users.data.map((u: any) => ({
+      id: u.id,
+      name: `${u.name || u.email} (${u.email})`,
+      disabled: false
+    }))
+  } catch (error) {
+    console.error('Failed to load resource lists:', error)
+    ElMessage.error('加载资源列表失败')
+  }
+}
+
+const loadAssignedResources = async (accountId: number) => {
+  try {
+    const [projects, webhooks, users] = await Promise.all([
+      resourceManagerAPI.getManagedResources(accountId, 'project'),
+      resourceManagerAPI.getManagedResources(accountId, 'webhook'),
+      resourceManagerAPI.getManagedResources(accountId, 'user')
+    ])
+    
+    console.log('Loaded assigned resources for account', accountId, {
+      projects,
+      webhooks,
+      users
+    })
+    
+    // 后端返回格式: { resource_ids: number[], total: number }
+    // apiClient 已经解包了 response.data，所以直接访问即可
+    assignedProjects.value = projects?.resource_ids || []
+    assignedWebhooks.value = webhooks?.resource_ids || []
+    assignedUsers.value = users?.resource_ids || []
+    
+    console.log('Set assigned values:', {
+      assignedProjects: assignedProjects.value,
+      assignedWebhooks: assignedWebhooks.value,
+      assignedUsers: assignedUsers.value
+    })
+  } catch (error) {
+    console.error('Failed to load assigned resources:', error)
+    // 初始化为空数组
+    assignedProjects.value = []
+    assignedWebhooks.value = []
+    assignedUsers.value = []
+  }
+}
+
+const selectAllProjects = () => {
+  assignedProjects.value = projectList.value.map(p => p.id)
+}
+
+const clearAllProjects = () => {
+  assignedProjects.value = []
+}
+
+const selectAllWebhooks = () => {
+  assignedWebhooks.value = webhookList.value.map(w => w.id)
+}
+
+const clearAllWebhooks = () => {
+  assignedWebhooks.value = []
+}
+
+const selectAllUsers = () => {
+  assignedUsers.value = userList.value.map(u => u.id)
+}
+
+const clearAllUsers = () => {
+  assignedUsers.value = []
+}
+
+const handleSaveAssignment = async () => {
+  assignLoading.value = true
+  
+  try {
+    // 保存各类资源的分配
+    const assignments = [
+      ...assignedProjects.value.map(id => ({ 
+        resource_id: id, 
+        resource_type: 'project' as const,
+        manager_id: assignForm.id
+      })),
+      ...assignedWebhooks.value.map(id => ({ 
+        resource_id: id, 
+        resource_type: 'webhook' as const,
+        manager_id: assignForm.id
+      })),
+      ...assignedUsers.value.map(id => ({ 
+        resource_id: id, 
+        resource_type: 'user' as const,
+        manager_id: assignForm.id
+      }))
+    ]
+    
+    // 批量更新资源分配
+    await resourceManagerAPI.batchAssign(assignForm.id, assignments)
+    
+    ElMessage.success('资源分配成功')
+    showAssignDialog.value = false
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || '资源分配失败')
+  } finally {
+    assignLoading.value = false
+  }
+}
+
 // 删除账户
 const handleDelete = async (row: AccountResponse) => {
   await ElMessageBox.confirm(
@@ -521,5 +870,34 @@ onMounted(() => {
   background: #fff;
   display: flex;
   justify-content: center;
+}
+
+.assign-header {
+  margin-bottom: 20px;
+}
+
+.resource-tabs {
+  margin-top: 20px;
+  
+  .resource-section {
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+      
+      span {
+        flex: 1;
+        font-weight: 500;
+        color: #606266;
+      }
+    }
+    
+    :deep(.el-transfer) {
+      .el-transfer-panel {
+        width: 300px;
+      }
+    }
+  }
 }
 </style>

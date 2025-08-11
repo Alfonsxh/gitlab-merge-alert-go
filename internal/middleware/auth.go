@@ -1,13 +1,16 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
 	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/internal/services"
 	"gitlab-merge-alert-go/pkg/auth"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 const (
@@ -150,4 +153,91 @@ func GetRole(c *gin.Context) (string, bool) {
 func IsAdmin(c *gin.Context) bool {
 	role, exists := GetRole(c)
 	return exists && role == models.RoleAdmin
+}
+
+// RequireResourcePermission 资源权限验证中间件
+func RequireResourcePermission(db *gorm.DB, resourceType models.ResourceType) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		accountID, exists := GetAccountID(c)
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+			c.Abort()
+			return
+		}
+
+		role, _ := GetRole(c)
+		
+		// 管理员拥有所有权限
+		if role == models.RoleAdmin {
+			c.Next()
+			return
+		}
+
+		// 获取资源ID
+		var resourceID uint
+		idParam := c.Param("id")
+		if idParam != "" {
+			var id int
+			if _, err := fmt.Sscanf(idParam, "%d", &id); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "无效的资源ID"})
+				c.Abort()
+				return
+			}
+			resourceID = uint(id)
+		}
+
+		// 如果是查看列表，则设置标记让handler过滤
+		if c.Request.Method == "GET" && resourceID == 0 {
+			c.Set("filter_by_permission", true)
+			c.Next()
+			return
+		}
+
+		// 检查是否有权限
+		if resourceID > 0 {
+			rmService := services.NewResourceManagerService(db)
+			if !rmService.HasPermission(accountID, role, resourceID, resourceType) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "没有权限访问此资源"})
+				c.Abort()
+				return
+			}
+		}
+
+		c.Next()
+	}
+}
+
+// RequireSelfOrAdmin 验证是否是自己的资源或管理员
+func RequireSelfOrAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		accountID, exists := GetAccountID(c)
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+			c.Abort()
+			return
+		}
+
+		role, _ := GetRole(c)
+		
+		// 管理员可以访问所有
+		if role == models.RoleAdmin {
+			c.Next()
+			return
+		}
+
+		// 检查是否是访问自己的资源
+		targetIDStr := c.Param("id")
+		if targetIDStr != "" {
+			var targetID uint
+			if _, err := fmt.Sscanf(targetIDStr, "%d", &targetID); err == nil {
+				if targetID != accountID {
+					c.JSON(http.StatusForbidden, gin.H{"error": "只能访问自己的资源"})
+					c.Abort()
+					return
+				}
+			}
+		}
+
+		c.Next()
+	}
 }

@@ -59,7 +59,7 @@ func (s *notificationService) ProcessMergeRequest(webhookData *models.GitLabWebh
 		TargetBranch:   webhookData.ObjectAttributes.TargetBranch,
 		AuthorEmail:    webhookData.User.Email,
 		Status:         webhookData.ObjectAttributes.State,
-		OwnerID:        project.CreatedBy, // 使用项目的创建者作为通知的所有者
+		// 不再设置 OwnerID，通知通过项目权限控制
 	}
 
 	// 将邮箱数组转换为JSON字符串（保持向后兼容）

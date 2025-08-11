@@ -29,6 +29,22 @@ export const authAPI = {
   // 修改密码
   changePassword: async (data: ChangePasswordRequest): Promise<void> => {
     await apiClient.post('/auth/change-password', data)
+  },
+
+  // 更新个人资料
+  updateProfile: async (data: { email?: string; avatar?: string }): Promise<AccountResponse> => {
+    const response = await apiClient.put<AccountResponse>('/auth/profile', data)
+    return response.data
+  },
+
+  // 上传头像
+  uploadAvatar: async (formData: FormData): Promise<{ avatar: string }> => {
+    const response = await apiClient.post<{ avatar: string }>('/auth/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
   }
 }
 

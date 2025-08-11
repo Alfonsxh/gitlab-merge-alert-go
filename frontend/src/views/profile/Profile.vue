@@ -7,12 +7,55 @@
     <el-tabs v-model="activeTab" class="profile-tabs">
       <el-tab-pane label="基本信息" name="info">
         <el-card>
+          <div class="profile-header">
+            <div class="avatar-section">
+              <el-upload
+                class="avatar-uploader"
+                :show-file-list="false"
+                :before-upload="beforeAvatarUpload"
+                :on-success="handleAvatarSuccess"
+                action="#"
+                :http-request="uploadAvatar"
+              >
+                <el-avatar 
+                  :size="120" 
+                  :src="avatarUrl"
+                  class="avatar-display"
+                >
+                  <el-icon :size="50"><User /></el-icon>
+                </el-avatar>
+                <div class="avatar-overlay">
+                  <el-icon :size="20"><Camera /></el-icon>
+                  <span>更换头像</span>
+                </div>
+              </el-upload>
+            </div>
+            <div class="info-section">
+              <h3>{{ authStore.user?.username || '加载中...' }}</h3>
+              <el-tag v-if="authStore.user" :type="authStore.user?.role === 'admin' ? 'danger' : 'primary'">
+                {{ authStore.user?.role === 'admin' ? '管理员' : '普通用户' }}
+              </el-tag>
+            </div>
+          </div>
+          
+          <el-divider />
+          
           <el-descriptions :column="1" border>
             <el-descriptions-item label="用户名">
               {{ authStore.user?.username }}
             </el-descriptions-item>
             <el-descriptions-item label="邮箱">
-              {{ authStore.user?.email }}
+              <div v-if="!editingEmail">
+                {{ authStore.user?.email }}
+                <el-button link type="primary" @click="startEditEmail">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </div>
+              <div v-else style="display: flex; gap: 10px;">
+                <el-input v-model="profileData.email" size="small" />
+                <el-button type="primary" size="small" @click="saveEmail">保存</el-button>
+                <el-button size="small" @click="cancelEditEmail">取消</el-button>
+              </div>
             </el-descriptions-item>
             <el-descriptions-item label="角色">
               <el-tag :type="authStore.user?.role === 'admin' ? 'danger' : 'primary'">
@@ -84,9 +127,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules, type UploadProps } from 'element-plus'
+import { User, Camera, Edit } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/api/auth'
 
@@ -96,6 +140,18 @@ const authStore = useAuthStore()
 const activeTab = ref('info')
 const loading = ref(false)
 const passwordFormRef = ref<FormInstance>()
+const editingEmail = ref(false)
+
+// 使用 computed 来动态获取头像，避免初始化时的错误
+const avatarUrl = computed(() => {
+  if (!authStore.user) return ''
+  return (authStore.user as any).avatar || ''
+})
+
+const profileData = reactive({
+  email: authStore.user?.email || '',
+  avatar: ''
+})
 
 const passwordForm = reactive({
   oldPassword: '',
@@ -164,7 +220,98 @@ const resetPasswordForm = () => {
   passwordFormRef.value?.resetFields()
 }
 
-onMounted(() => {
+const startEditEmail = () => {
+  profileData.email = authStore.user?.email || ''
+  editingEmail.value = true
+}
+
+const cancelEditEmail = () => {
+  editingEmail.value = false
+  profileData.email = authStore.user?.email || ''
+}
+
+const saveEmail = async () => {
+  if (!profileData.email) {
+    ElMessage.error('邮箱不能为空')
+    return
+  }
+  
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(profileData.email)) {
+    ElMessage.error('请输入有效的邮箱地址')
+    return
+  }
+  
+  loading.value = true
+  try {
+    await authAPI.updateProfile({ email: profileData.email })
+    
+    if (authStore.user) {
+      authStore.user.email = profileData.email
+    }
+    
+    ElMessage.success('邮箱更新成功')
+    editingEmail.value = false
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || '更新失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const beforeAvatarUpload: UploadProps['beforeUpload'] = (rawFile) => {
+  if (!rawFile.type.startsWith('image/')) {
+    ElMessage.error('只能上传图片文件')
+    return false
+  }
+  if (rawFile.size / 1024 / 1024 > 5) {
+    ElMessage.error('图片大小不能超过 5MB')
+    return false
+  }
+  return true
+}
+
+const uploadAvatar = async ({ file }: any) => {
+  const formData = new FormData()
+  formData.append('avatar', file)
+  
+  try {
+    const response = await authAPI.uploadAvatar(formData)
+    
+    // 重新获取用户信息以更新 avatar
+    try {
+      await authStore.fetchProfile()
+    } catch (err) {
+      console.error('Failed to refresh profile:', err)
+    }
+    
+    ElMessage.success('头像上传成功')
+    return response
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || '头像上传失败')
+    throw error
+  }
+}
+
+const handleAvatarSuccess = () => {
+  // 不需要手动更新，computed 会自动响应
+}
+
+onMounted(async () => {
+  // 如果用户信息不存在，尝试获取
+  if (!authStore.user) {
+    try {
+      await authStore.fetchProfile()
+    } catch (error) {
+      console.error('Failed to fetch profile:', error)
+    }
+  }
+  
+  // 初始化数据
+  if (authStore.user) {
+    profileData.email = authStore.user.email || ''
+  }
+  
   // 检查是否需要切换到密码标签页
   if (route.query.tab === 'password') {
     activeTab.value = 'password'
@@ -202,6 +349,64 @@ onMounted(() => {
   :deep(.el-descriptions__label) {
     font-weight: 600;
     color: #606266;
+  }
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  margin-bottom: 20px;
+  
+  .avatar-section {
+    position: relative;
+    
+    .avatar-uploader {
+      position: relative;
+      cursor: pointer;
+      
+      &:hover .avatar-overlay {
+        opacity: 1;
+      }
+    }
+    
+    .avatar-display {
+      border: 2px solid #e4e7ed;
+      background-color: #f5f7fa;
+    }
+    
+    .avatar-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      opacity: 0;
+      transition: opacity 0.3s;
+      
+      span {
+        margin-top: 5px;
+        font-size: 12px;
+      }
+    }
+  }
+  
+  .info-section {
+    flex: 1;
+    
+    h3 {
+      margin: 0 0 10px 0;
+      font-size: 24px;
+      font-weight: 600;
+      color: #303133;
+    }
   }
 }
 </style>

@@ -19,6 +19,7 @@ export interface AccountResponse {
   username: string
   email: string
   role: string
+  avatar?: string
   is_active: boolean
   last_login_at?: string
   created_at: string

@@ -176,8 +176,17 @@ func ApplyOwnershipFilter(c *gin.Context, query *gorm.DB, tableName string) *gor
 	// 根据不同的表使用不同的字段
 	switch tableName {
 	case "notifications":
-		// notifications 表使用 owner_id
-		return query.Where(tableName+".owner_id = ?", accountID)
+		// notifications 表：通过项目权限控制，查看用户有权限访问的项目的通知
+		return query.Where(tableName+".project_id IN (SELECT id FROM projects WHERE created_by = ? OR id IN (SELECT resource_id FROM resource_managers WHERE manager_id = ? AND resource_type = 'project'))", accountID, accountID)
+	case "projects":
+		// projects 表：查询用户创建的或被分配管理的项目
+		return query.Where(tableName+".created_by = ? OR "+tableName+".id IN (SELECT resource_id FROM resource_managers WHERE manager_id = ? AND resource_type = 'project')", accountID, accountID)
+	case "webhooks":
+		// webhooks 表：查询用户创建的或被分配管理的 webhook
+		return query.Where(tableName+".created_by = ? OR "+tableName+".id IN (SELECT resource_id FROM resource_managers WHERE manager_id = ? AND resource_type = 'webhook')", accountID, accountID)
+	case "users":
+		// users 表：查询用户创建的或被分配管理的用户
+		return query.Where(tableName+".created_by = ? OR "+tableName+".id IN (SELECT resource_id FROM resource_managers WHERE manager_id = ? AND resource_type = 'user')", accountID, accountID)
 	default:
 		// 其他表使用 created_by
 		return query.Where(tableName+".created_by = ?", accountID)
