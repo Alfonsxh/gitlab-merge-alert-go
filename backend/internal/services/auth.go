@@ -41,7 +41,7 @@ func NewAuthService(db *gorm.DB, jwtSecret string, jwtDuration time.Duration) Au
 
 func (s *authService) Login(username, password string) (*models.LoginResponse, error) {
 	var account models.Account
-	
+
 	// 查找账户
 	if err := s.db.Where("username = ?", username).First(&account).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -76,7 +76,7 @@ func (s *authService) Login(username, password string) (*models.LoginResponse, e
 	return &models.LoginResponse{
 		Token:     token,
 		ExpiresAt: expiresAt,
-		User:      &account,
+		User:      account.ToResponse(),
 	}, nil
 }
 
@@ -107,7 +107,7 @@ func (s *authService) RefreshToken(oldToken string) (*models.LoginResponse, erro
 	return &models.LoginResponse{
 		Token:     token,
 		ExpiresAt: expiresAt,
-		User:      account,
+		User:      account.ToResponse(),
 	}, nil
 }
 
@@ -177,6 +177,6 @@ func (s *authService) InitializeAdminAccount() error {
 
 	logger.GetLogger().Info("Default admin account created (username: admin, password: admin123456)")
 	logger.GetLogger().Warn("Please change the default admin password immediately!")
-	
+
 	return nil
 }

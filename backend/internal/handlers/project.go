@@ -12,18 +12,61 @@ import (
 	"gitlab-merge-alert-go/internal/models"
 	"gitlab-merge-alert-go/internal/services"
 	"gitlab-merge-alert-go/pkg/logger"
+	"gitlab-merge-alert-go/pkg/security"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
+var (
+	errGitLabTokenMissing = errors.New("gitlab personal access token not configured")
+	errUnauthorized       = errors.New("unauthorized")
+)
+
+func (h *Handler) resolveGitLabToken(c *gin.Context, provided string) (string, error) {
+	if token := strings.TrimSpace(provided); token != "" {
+		return token, nil
+	}
+
+	accountID, exists := middleware.GetAccountID(c)
+	if !exists {
+		return "", errUnauthorized
+	}
+
+	var account models.Account
+	if err := h.db.Select("gitlab_access_token").First(&account, accountID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", errUnauthorized
+		}
+		return "", err
+	}
+
+	if account.GitLabAccessToken == "" {
+		return "", errGitLabTokenMissing
+	}
+
+	decrypted, err := security.Decrypt(h.config.EncryptionKey, account.GitLabAccessToken)
+	var token string
+	if err != nil {
+		logger.GetLogger().Warnf("Failed to decrypt GitLab token for account %d, fallback to legacy plaintext: %v", accountID, err)
+		token = strings.TrimSpace(account.GitLabAccessToken)
+	} else {
+		token = strings.TrimSpace(decrypted)
+	}
+	if token == "" {
+		return "", errGitLabTokenMissing
+	}
+
+	return token, nil
+}
+
 func (h *Handler) GetProjects(c *gin.Context) {
 	var projects []models.Project
-	
+
 	// 应用所有权过滤
 	query := h.db.Preload("Webhooks")
 	query = middleware.ApplyOwnershipFilter(c, query, "projects")
-	
+
 	if err := query.Find(&projects).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
 		return
@@ -72,11 +115,24 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		return
 	}
 
+	token, err := h.resolveGitLabToken(c, req.AccessToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, errUnauthorized):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		case errors.Is(err, errGitLabTokenMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "当前账户未配置 GitLab Personal Access Token，请先在账户管理中设置"})
+		default:
+			logger.GetLogger().Errorf("Failed to resolve GitLab token: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "解析凭证失败"})
+		}
+		return
+	}
+
 	// 验证GitLab项目是否存在
 	if h.gitlabService != nil {
-		// 优先使用请求中提供的token进行验证
-		_, err := h.gitlabService.GetProject(req.GitLabProjectID, req.AccessToken)
-		if err != nil {
+		// 使用解析后的token进行验证
+		if _, err := h.gitlabService.GetProject(req.GitLabProjectID, token); err != nil {
 			logger.GetLogger().Errorf("Failed to fetch GitLab project [ID: %d]: %v", req.GitLabProjectID, err)
 			h.response.ErrorWithMessage(c, "保存项目失败: GitLab项目不存在或访问被拒绝")
 			return
@@ -91,7 +147,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 
 	// 检查项目是否已存在
 	var existingProject models.Project
-	err := h.db.Where(&models.Project{GitLabProjectID: req.GitLabProjectID}).First(&existingProject).Error
+	err = h.db.Where(&models.Project{GitLabProjectID: req.GitLabProjectID}).First(&existingProject).Error
 	if err == nil {
 		// 项目已存在
 		logger.GetLogger().Warnf("Attempt to create existing project [GitLab ID: %d, Name: %s] from IP: %s", req.GitLabProjectID, req.Name, c.ClientIP())
@@ -106,14 +162,13 @@ func (h *Handler) CreateProject(c *gin.Context) {
 
 	// 获取当前用户ID
 	accountID, _ := middleware.GetAccountID(c)
-	
+
 	// 创建新项目
 	project := &models.Project{
 		GitLabProjectID:   req.GitLabProjectID,
 		Name:              req.Name,
 		URL:               req.URL,
 		Description:       req.Description,
-		AccessToken:       req.AccessToken,
 		AutoManageWebhook: autoManageWebhook,
 		WebhookSynced:     false,
 		CreatedBy:         &accountID,
@@ -145,8 +200,8 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	}
 
 	// 如果启用了自动管理webhook，尝试创建GitLab webhook
-	if project.AutoManageWebhook && project.AccessToken != "" {
-		h.autoCreateGitLabWebhook(project)
+	if project.AutoManageWebhook {
+		h.autoCreateGitLabWebhook(project, token)
 	}
 
 	logger.GetLogger().Infof("Successfully created project [ID: %d, GitLab ID: %d, Name: %s] from IP: %s",
@@ -198,9 +253,7 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	if req.Description != "" {
 		project.Description = req.Description
 	}
-	if req.AccessToken != "" {
-		project.AccessToken = req.AccessToken
-	}
+	providedToken := strings.TrimSpace(req.AccessToken)
 	if req.AutoManageWebhook != nil {
 		project.AutoManageWebhook = *req.AutoManageWebhook
 	}
@@ -235,6 +288,24 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新项目关联的webhook失败"})
 			return
 		}
+	}
+
+	if project.AutoManageWebhook {
+		token, err := h.resolveGitLabToken(c, providedToken)
+		if err != nil {
+			if errors.Is(err, errGitLabTokenMissing) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "当前账户未配置 GitLab Personal Access Token，无法启用自动Webhook管理"})
+				return
+			}
+			if errors.Is(err, errUnauthorized) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+				return
+			}
+			logger.GetLogger().Errorf("Failed to resolve GitLab token for project update [ID: %d]: %v", project.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新项目失败"})
+			return
+		}
+		h.autoCreateGitLabWebhook(&project, token)
 	}
 
 	if err := h.db.Save(&project).Error; err != nil {
@@ -301,8 +372,21 @@ func (h *Handler) DeleteProject(c *gin.Context) {
 	}
 
 	// 如果有GitLab webhook，尝试删除
-	if project.GitLabWebhookID != nil && project.AccessToken != "" {
-		h.autoDeleteGitLabWebhook(&project)
+	if project.GitLabWebhookID != nil {
+		token, tokenErr := h.resolveGitLabToken(c, "")
+		if tokenErr != nil {
+			if errors.Is(tokenErr, errUnauthorized) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+				return
+			}
+			if errors.Is(tokenErr, errGitLabTokenMissing) {
+				logger.GetLogger().Warnf("Skip GitLab webhook cleanup for project %d: token not configured", project.ID)
+			} else {
+				logger.GetLogger().Warnf("Skip GitLab webhook cleanup for project %d due to token error: %v", project.ID, tokenErr)
+			}
+		} else if token != "" {
+			h.autoDeleteGitLabWebhook(&project, token)
+		}
 	}
 
 	if err := h.db.Delete(&models.Project{}, id).Error; err != nil {
@@ -324,8 +408,22 @@ func (h *Handler) ParseProjectURL(c *gin.Context) {
 		return
 	}
 
+	token, err := h.resolveGitLabToken(c, req.AccessToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, errUnauthorized):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		case errors.Is(err, errGitLabTokenMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请先在账户管理中配置 GitLab Personal Access Token"})
+		default:
+			logger.GetLogger().Errorf("Failed to resolve GitLab token for parse URL: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "解析凭证失败"})
+		}
+		return
+	}
+
 	// 使用GitLab服务解析URL并获取项目信息
-	projectInfo, err := h.gitlabService.GetProjectByURL(req.URL, req.AccessToken)
+	projectInfo, err := h.gitlabService.GetProjectByURL(req.URL, token)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -364,8 +462,22 @@ func (h *Handler) TestGitLabConnection(c *gin.Context) {
 		return
 	}
 
+	token, err := h.resolveGitLabToken(c, req.AccessToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, errUnauthorized):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		case errors.Is(err, errGitLabTokenMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请先在账户管理中配置 GitLab Personal Access Token"})
+		default:
+			logger.GetLogger().Errorf("Failed to resolve GitLab token for connection test: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "解析凭证失败"})
+		}
+		return
+	}
+
 	// 测试连接
-	err := h.gitlabService.TestConnection(parsed.BaseURL, req.AccessToken)
+	err = h.gitlabService.TestConnection(parsed.BaseURL, token)
 
 	response := models.GitLabConnectionTestResponse{}
 	if err != nil {
@@ -394,11 +506,25 @@ func (h *Handler) ScanGroupProjects(c *gin.Context) {
 		return
 	}
 
+	token, err := h.resolveGitLabToken(c, req.AccessToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, errUnauthorized):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		case errors.Is(err, errGitLabTokenMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请先在账户管理中配置 GitLab Personal Access Token"})
+		default:
+			logger.GetLogger().Errorf("Failed to resolve GitLab token for scanning group: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "解析凭证失败"})
+		}
+		return
+	}
+
 	// 首先尝试作为组解析
-	groupInfo, err := h.gitlabService.GetGroupByPath(parsed.BaseURL, parsed.ProjectPath, req.AccessToken)
+	groupInfo, err := h.gitlabService.GetGroupByPath(parsed.BaseURL, parsed.ProjectPath, token)
 	if err != nil {
 		// 如果不是组，尝试作为项目解析
-		projectInfo, projectErr := h.gitlabService.GetProjectByPath(parsed.BaseURL, parsed.ProjectPath, req.AccessToken)
+		projectInfo, projectErr := h.gitlabService.GetProjectByPath(parsed.BaseURL, parsed.ProjectPath, token)
 		if projectErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "无法识别为组或项目: " + err.Error()})
 			return
@@ -425,7 +551,7 @@ func (h *Handler) ScanGroupProjects(c *gin.Context) {
 	}
 
 	// 是组，获取组下所有项目
-	projects, err := h.gitlabService.GetGroupProjects(parsed.BaseURL, parsed.ProjectPath, req.AccessToken)
+	projects, err := h.gitlabService.GetGroupProjects(parsed.BaseURL, parsed.ProjectPath, token)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "获取组项目失败: " + err.Error()})
 		return
@@ -470,6 +596,20 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 
 	// 获取当前用户ID
 	accountID, _ := middleware.GetAccountID(c)
+
+	token, err := h.resolveGitLabToken(c, req.AccessToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, errUnauthorized):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		case errors.Is(err, errGitLabTokenMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请先在账户管理中配置 GitLab Personal Access Token"})
+		default:
+			logger.GetLogger().Errorf("Failed to resolve GitLab token for batch create: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "解析凭证失败"})
+		}
+		return
+	}
 
 	var results []models.BatchProjectResult
 	successCount := 0
@@ -545,7 +685,6 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 			Name:              projectInfo.Name,
 			URL:               projectInfo.URL,
 			Description:       projectInfo.Description,
-			AccessToken:       req.AccessToken,
 			AutoManageWebhook: true, // 批量创建时默认启用自动管理
 			WebhookSynced:     false,
 			CreatedBy:         &accountID,
@@ -567,7 +706,7 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 
 		// 在事务提交后异步创建GitLab webhook
 		defer func(p *models.Project) {
-			go h.autoCreateGitLabWebhook(p)
+			go h.autoCreateGitLabWebhook(p, token)
 		}(project)
 
 		// 关联webhook
@@ -671,8 +810,21 @@ func (h *Handler) SyncGitLabWebhook(c *gin.Context) {
 	// 构建webhook URL
 	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
 
+	token, err := h.resolveGitLabToken(c, "")
+	if err != nil {
+		if errors.Is(err, errUnauthorized) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		} else if errors.Is(err, errGitLabTokenMissing) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "当前账户未配置 GitLab Personal Access Token"})
+		} else {
+			logger.GetLogger().Errorf("Failed to resolve GitLab token for sync [project ID: %d]: %v", project.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "同步失败: 无法解析凭证"})
+		}
+		return
+	}
+
 	// 检查是否已存在相同的webhook
-	existingWebhook, err := h.gitlabService.FindWebhookByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+	existingWebhook, err := h.gitlabService.FindWebhookByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "检查现有webhook失败: " + err.Error()})
 		return
@@ -695,8 +847,8 @@ func (h *Handler) SyncGitLabWebhook(c *gin.Context) {
 		}
 	} else {
 		// 创建新的webhook
-		gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
-		webhook, err := gitlabService.CreateProjectWebhook(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+		gitlabService := services.NewGitLabService(parsed.BaseURL, token)
+		webhook, err := gitlabService.CreateProjectWebhook(parsed.BaseURL, project.GitLabProjectID, webhookURL, token)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建GitLab webhook失败: " + err.Error()})
 			return
@@ -748,9 +900,22 @@ func (h *Handler) DeleteGitLabWebhook(c *gin.Context) {
 	// 构建webhook URL
 	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
 
+	token, err := h.resolveGitLabToken(c, "")
+	if err != nil {
+		if errors.Is(err, errUnauthorized) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		} else if errors.Is(err, errGitLabTokenMissing) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "当前账户未配置 GitLab Personal Access Token"})
+		} else {
+			logger.GetLogger().Errorf("Failed to resolve GitLab token for delete webhook [project ID: %d]: %v", project.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除GitLab webhook失败: 无法解析凭证"})
+		}
+		return
+	}
+
 	// 删除GitLab中所有匹配的webhook
-	gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
-	deletedCount, err := gitlabService.DeleteAllWebhooksByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+	gitlabService := services.NewGitLabService(parsed.BaseURL, token)
+	deletedCount, err := gitlabService.DeleteAllWebhooksByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, token)
 
 	var responseMessage string
 	if err != nil {
@@ -805,11 +970,21 @@ func (h *Handler) GetGitLabWebhookStatus(c *gin.Context) {
 
 	// 检查是否有权限管理webhook（通过测试连接来判断）
 	canManage := false
-	if project.AccessToken != "" {
+	token, tokenErr := h.resolveGitLabToken(c, "")
+	if tokenErr != nil {
+		if errors.Is(tokenErr, errUnauthorized) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		if tokenErr != errGitLabTokenMissing {
+			logger.GetLogger().Warnf("Failed to resolve GitLab token when checking webhook status for project %d: %v", project.ID, tokenErr)
+		}
+	} else if token != "" {
 		parsed := h.gitlabService.ParseGitLabURL(project.URL)
 		if parsed.IsValid {
-			err := h.gitlabService.TestConnection(parsed.BaseURL, project.AccessToken)
-			canManage = (err == nil)
+			if err := h.gitlabService.TestConnection(parsed.BaseURL, token); err == nil {
+				canManage = true
+			}
 		}
 	}
 
@@ -826,7 +1001,7 @@ func (h *Handler) GetGitLabWebhookStatus(c *gin.Context) {
 }
 
 // autoCreateGitLabWebhook 自动创建GitLab webhook
-func (h *Handler) autoCreateGitLabWebhook(project *models.Project) {
+func (h *Handler) autoCreateGitLabWebhook(project *models.Project, token string) {
 	// 解析GitLab URL
 	parsed := h.gitlabService.ParseGitLabURL(project.URL)
 	if !parsed.IsValid {
@@ -838,7 +1013,7 @@ func (h *Handler) autoCreateGitLabWebhook(project *models.Project) {
 	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
 
 	// 检查是否已存在相同的webhook
-	existingWebhook, err := h.gitlabService.FindWebhookByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+	existingWebhook, err := h.gitlabService.FindWebhookByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, token)
 	if err != nil {
 		logger.GetLogger().Warnf("检查项目 %d 现有webhook失败: %v", project.ID, err)
 		return
@@ -854,8 +1029,8 @@ func (h *Handler) autoCreateGitLabWebhook(project *models.Project) {
 		logger.GetLogger().Infof("项目 %d 的GitLab webhook已存在，状态已更新", project.ID)
 	} else {
 		// 创建新的webhook
-		gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
-		webhook, err := gitlabService.CreateProjectWebhook(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+		gitlabService := services.NewGitLabService(parsed.BaseURL, token)
+		webhook, err := gitlabService.CreateProjectWebhook(parsed.BaseURL, project.GitLabProjectID, webhookURL, token)
 		if err != nil {
 			logger.GetLogger().Warnf("为项目 %d 创建GitLab webhook失败: %v", project.ID, err)
 			return
@@ -875,7 +1050,7 @@ func (h *Handler) autoCreateGitLabWebhook(project *models.Project) {
 }
 
 // autoDeleteGitLabWebhook 自动删除GitLab webhook（支持删除多个重复的webhook）
-func (h *Handler) autoDeleteGitLabWebhook(project *models.Project) {
+func (h *Handler) autoDeleteGitLabWebhook(project *models.Project, token string) {
 	// 解析GitLab URL
 	parsed := h.gitlabService.ParseGitLabURL(project.URL)
 	if !parsed.IsValid {
@@ -887,8 +1062,8 @@ func (h *Handler) autoDeleteGitLabWebhook(project *models.Project) {
 	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
 
 	// 删除GitLab中所有匹配的webhook
-	gitlabService := services.NewGitLabService(parsed.BaseURL, project.AccessToken)
-	deletedCount, err := gitlabService.DeleteAllWebhooksByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, project.AccessToken)
+	gitlabService := services.NewGitLabService(parsed.BaseURL, token)
+	deletedCount, err := gitlabService.DeleteAllWebhooksByURL(parsed.BaseURL, project.GitLabProjectID, webhookURL, token)
 	if err != nil {
 		logger.GetLogger().Warnf("删除项目 %d 的GitLab webhook失败: %v (已删除 %d 个)", project.ID, err, deletedCount)
 		// 即使删除失败也继续，可能是webhook已经被手动删除

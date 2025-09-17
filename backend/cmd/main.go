@@ -8,6 +8,7 @@ import (
 	"gitlab-merge-alert-go/internal/config"
 	"gitlab-merge-alert-go/internal/database"
 	"gitlab-merge-alert-go/internal/handlers"
+	"gitlab-merge-alert-go/internal/web"
 	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -45,12 +46,13 @@ func main() {
 	router.Use(gin.Recovery())
 
 	// 为 Vue SPA 服务静态文件
-	router.Static("/assets", "./frontend/dist/assets")
-	router.StaticFile("/vite.svg", "./frontend/dist/vite.svg")
+	if err := web.SetupStaticFiles(router); err != nil {
+		log.Fatalf("Failed to setup static files: %v", err)
+	}
 
 	// 初始化处理器
 	h := handlers.New(db, cfg)
-	
+
 	// 初始化默认管理员账户
 	if err := h.InitializeAdminAccount(); err != nil {
 		log.Fatalf("Failed to initialize admin account: %v", err)
@@ -58,6 +60,11 @@ func main() {
 
 	// 注册路由
 	setupRoutes(router, h)
+
+	// 添加根路径处理，返回 index.html
+	router.GET("/", func(c *gin.Context) {
+		web.ServeIndexHTML(c)
+	})
 
 	// 启动服务器
 	logger.GetLogger().Infof("Starting server on %s:%d", cfg.Host, cfg.Port)
@@ -78,10 +85,10 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			auth.POST("/logout", h.Logout)
 			auth.POST("/refresh", h.RefreshToken)
 		}
-		
+
 		// GitLab Webhook接收（无需认证，使用 webhook 自身的验证）
 		api.POST("/webhook/gitlab", h.HandleGitLabWebhook)
-		
+
 		// 需要认证的路由
 		protected := api.Group("")
 		protected.Use(h.GetAuthMiddleware().RequireAuth())
@@ -140,6 +147,7 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			{
 				gitlab.POST("/test-connection", h.TestGitLabConnection)
 				gitlab.GET("/config", h.GetGitLabConfig)
+				gitlab.POST("/test-token", h.TestGitLabToken)
 			}
 
 			// Webhook管理API
@@ -173,7 +181,7 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			protected.GET("/stats/webhooks/daily", h.GetWebhookDailyStats)
 		}
 	}
-	
+
 	// 配置 SPA 路由 - 必须在 API 路由之后定义
 	router.NoRoute(func(c *gin.Context) {
 		// API 路由不存在时返回 404
@@ -182,6 +190,6 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			return
 		}
 		// 其他路由返回 index.html
-		c.File("./frontend/dist/index.html")
+		web.ServeIndexHTML(c)
 	})
 }

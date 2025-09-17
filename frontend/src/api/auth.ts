@@ -32,7 +32,7 @@ export const authAPI = {
   },
 
   // 更新个人资料
-  updateProfile: async (data: { email?: string; avatar?: string }): Promise<AccountResponse> => {
+  updateProfile: async (data: { email?: string; avatar?: string; gitlab_personal_access_token?: string }): Promise<AccountResponse> => {
     const response = await apiClient.put<AccountResponse>('/auth/profile', data)
     return response.data
   },
@@ -72,6 +72,7 @@ export const accountAPI = {
     password: string
     email: string
     role?: string
+    gitlab_personal_access_token?: string
   }): Promise<AccountResponse> => {
     const response = await apiClient.post<AccountResponse>('/accounts', data)
     return response.data
@@ -82,6 +83,7 @@ export const accountAPI = {
     email?: string
     role?: string
     is_active?: boolean
+    gitlab_personal_access_token?: string
   }): Promise<AccountResponse> => {
     const response = await apiClient.put<AccountResponse>(`/accounts/${id}`, data)
     return response.data

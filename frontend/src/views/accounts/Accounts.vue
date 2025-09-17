@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">账户管理</h1>
-      <el-button type="primary" @click="showCreateDialog = true">
+      <el-button type="primary" @click="openCreateDialog">
         <el-icon><Plus /></el-icon>
         创建账户
       </el-button>
@@ -55,6 +55,13 @@
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'success' : 'danger'">
             {{ row.is_active ? '正常' : '已禁用' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="GitLab Token" width="140">
+        <template #default="{ row }">
+          <el-tag :type="row.has_gitlab_personal_access_token ? 'success' : 'info'" size="small">
+            {{ row.has_gitlab_personal_access_token ? '已配置' : '未配置' }}
           </el-tag>
         </template>
       </el-table-column>
@@ -154,6 +161,23 @@
             <el-option label="普通用户" value="user" />
           </el-select>
         </el-form-item>
+        <el-form-item label="GitLab Token">
+          <div class="token-input-group">
+            <el-input
+              v-model="createForm.gitlab_personal_access_token"
+              type="password"
+              placeholder="可选，留空可稍后配置"
+              show-password
+            />
+            <el-button type="primary" @click="handleCreateTokenTest" :loading="createTokenTesting" plain>
+              测试连接
+            </el-button>
+          </div>
+          <div class="form-item-help">
+            建议使用具备 <strong>api</strong> 与 <strong>read_api</strong> 权限的个人访问令牌。
+            <el-link :href="gitlabPatDocUrl" target="_blank" type="primary">查看生成指南</el-link>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreateDialog = false">取消</el-button>
@@ -190,6 +214,28 @@
         </el-form-item>
         <el-form-item label="状态" prop="is_active">
           <el-switch v-model="editForm.is_active" />
+        </el-form-item>
+        <el-form-item label="GitLab Token">
+          <div class="token-input-group">
+            <el-input
+              v-model="editForm.gitlab_personal_access_token"
+              type="password"
+              placeholder="留空表示使用已保存的 Token"
+              show-password
+              @input="markEditTokenTouched"
+            />
+            <el-button type="primary" @click="handleEditTokenTest" :loading="editTokenTesting" plain>
+              测试连接
+            </el-button>
+          </div>
+          <div class="form-item-help">
+            <span>当前状态：</span>
+            <el-tag :type="editForm.has_gitlab_personal_access_token ? 'success' : 'info'" size="small" style="margin-right: 8px;">
+              {{ editForm.has_gitlab_personal_access_token ? '已配置' : '未配置' }}
+            </el-tag>
+            <el-button type="danger" link size="small" @click="clearEditToken">清除Token</el-button>
+            <el-link :href="gitlabPatDocUrl" target="_blank" type="primary" style="margin-left: 8px;">获取帮助</el-link>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -361,7 +407,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Plus } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { accountAPI } from '@/api/auth'
-import { projectsApi } from '@/api/projects'
+import { gitlabApi, projectsApi } from '@/api'
 import { webhooksApi } from '@/api/webhooks'
 import { usersApi } from '@/api/users'
 import { resourceManagerAPI } from '@/api/resource-manager'
@@ -372,6 +418,9 @@ const authStore = useAuthStore()
 // 数据
 const loading = ref(false)
 const accountList = ref<AccountResponse[]>([])
+const gitlabUrl = ref('')
+const createTokenTesting = ref(false)
+const editTokenTesting = ref(false)
 const pagination = reactive({
   page: 1,
   pageSize: 20,
@@ -392,7 +441,8 @@ const createForm = reactive({
   username: '',
   password: '',
   email: '',
-  role: 'user'
+  role: 'user',
+  gitlab_personal_access_token: ''
 })
 const createRules = reactive<FormRules>({
   username: [
@@ -412,6 +462,19 @@ const createRules = reactive<FormRules>({
   ]
 })
 
+const resetCreateForm = () => {
+  createForm.username = ''
+  createForm.password = ''
+  createForm.email = ''
+  createForm.role = 'user'
+  createForm.gitlab_personal_access_token = ''
+}
+
+const openCreateDialog = () => {
+  resetCreateForm()
+  showCreateDialog.value = true
+}
+
 // 编辑账户
 const showEditDialog = ref(false)
 const editLoading = ref(false)
@@ -421,8 +484,11 @@ const editForm = reactive({
   username: '',
   email: '',
   role: '',
-  is_active: true
+  is_active: true,
+  gitlab_personal_access_token: '',
+  has_gitlab_personal_access_token: false
 })
+const gitlabTokenTouched = ref(false)
 const editRules = reactive<FormRules>({
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
@@ -432,6 +498,16 @@ const editRules = reactive<FormRules>({
     { required: true, message: '请选择角色', trigger: 'change' }
   ]
 })
+
+const markEditTokenTouched = () => {
+  gitlabTokenTouched.value = true
+}
+
+const clearEditToken = () => {
+  editForm.gitlab_personal_access_token = ''
+  editForm.has_gitlab_personal_access_token = false
+  gitlabTokenTouched.value = true
+}
 
 // 资源分配
 const showAssignDialog = ref(false)
@@ -503,6 +579,65 @@ const resetSearch = () => {
   handleSearch()
 }
 
+const loadGitLabConfig = async () => {
+  try {
+    const res = await gitlabApi.getConfig()
+    gitlabUrl.value = res.data.gitlab_url
+  } catch (error) {
+    console.error('Failed to fetch GitLab config:', error)
+  }
+}
+
+const gitlabPatDocUrl = 'https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html'
+
+const testGitLabToken = async (token?: string) => {
+  const payload: Record<string, string> = {}
+  const trimmed = token?.trim() ?? ''
+  if (trimmed) {
+    payload.access_token = trimmed
+  }
+  if (gitlabUrl.value) {
+    payload.gitlab_url = gitlabUrl.value
+  }
+
+  const res: any = await gitlabApi.testToken(payload)
+  const result = res?.data ?? res
+  if (result?.success) {
+    ElMessage.success(result.message || '连接成功')
+  } else {
+    ElMessage.error(result?.message || '连接失败，请检查 Token 或 GitLab 配置')
+  }
+}
+
+const handleCreateTokenTest = async () => {
+  if (!createForm.gitlab_personal_access_token.trim()) {
+    ElMessage.warning('请先输入 GitLab Token')
+    return
+  }
+
+  createTokenTesting.value = true
+  try {
+    await testGitLabToken(createForm.gitlab_personal_access_token)
+  } finally {
+    createTokenTesting.value = false
+  }
+}
+
+const handleEditTokenTest = async () => {
+  const token = editForm.gitlab_personal_access_token.trim()
+  if (!token && !editForm.has_gitlab_personal_access_token) {
+    ElMessage.warning('请先输入 GitLab Token')
+    return
+  }
+
+  editTokenTesting.value = true
+  try {
+    await testGitLabToken(token || undefined)
+  } finally {
+    editTokenTesting.value = false
+  }
+}
+
 // 创建账户
 const handleCreate = async () => {
   if (!createFormRef.value) return
@@ -515,6 +650,7 @@ const handleCreate = async () => {
       await accountAPI.createAccount(createForm)
       ElMessage.success('账户创建成功')
       showCreateDialog.value = false
+      resetCreateForm()
       fetchAccounts()
     } catch (error: any) {
       ElMessage.error(error.response?.data?.error || '创建失败')
@@ -531,6 +667,9 @@ const handleEdit = (row: AccountResponse) => {
   editForm.email = row.email
   editForm.role = row.role
   editForm.is_active = row.is_active
+  editForm.gitlab_personal_access_token = ''
+  editForm.has_gitlab_personal_access_token = row.has_gitlab_personal_access_token
+  gitlabTokenTouched.value = false
   showEditDialog.value = true
 }
 
@@ -543,13 +682,22 @@ const handleUpdate = async () => {
     
     editLoading.value = true
     try {
-      await accountAPI.updateAccount(editForm.id, {
+      const payload: Record<string, any> = {
         email: editForm.email,
         role: editForm.role,
         is_active: editForm.is_active
-      })
+      }
+      if (gitlabTokenTouched.value) {
+        payload.gitlab_personal_access_token = editForm.gitlab_personal_access_token
+      }
+
+      await accountAPI.updateAccount(editForm.id, payload)
       ElMessage.success('账户更新成功')
       showEditDialog.value = false
+      if (gitlabTokenTouched.value) {
+        editForm.has_gitlab_personal_access_token = !!editForm.gitlab_personal_access_token
+        gitlabTokenTouched.value = false
+      }
       fetchAccounts()
     } catch (error: any) {
       ElMessage.error(error.response?.data?.error || '更新失败')
@@ -811,6 +959,7 @@ const handleDelete = async (row: AccountResponse) => {
 
 onMounted(() => {
   fetchAccounts()
+  loadGitLabConfig()
 })
 </script>
 
@@ -870,6 +1019,26 @@ onMounted(() => {
   background: #fff;
   display: flex;
   justify-content: center;
+}
+
+.form-item-help {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 6px;
+
+  strong {
+    font-weight: 600;
+  }
+}
+
+.token-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  :deep(.el-input) {
+    flex: 1;
+  }
 }
 
 .assign-header {

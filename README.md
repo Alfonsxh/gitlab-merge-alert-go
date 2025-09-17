@@ -136,7 +136,6 @@ GitLab Merge Request 通知服务的 Golang 重构版本，用于将 GitLab 的�
    cat > ./docker-data/.env << EOF
    GMA_GITLAB_URL=https://your-gitlab-server.com
    GMA_DEFAULT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-REAL-KEY
-   GMA_GITLAB_PERSONAL_ACCESS_TOKEN=your-gitlab-token
    GMA_DATABASE_PATH=/data/app.db
    GMA_HOST=0.0.0.0
    GMA_PORT=1688
@@ -222,7 +221,6 @@ services:
       # 添加其他环境变量
       - GMA_GITLAB_URL=${GITLAB_URL}
       - GMA_DEFAULT_WEBHOOK_URL=${WEBHOOK_URL}
-      - GMA_GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_TOKEN}
 ```
 
 使用 Docker Compose：
@@ -386,8 +384,10 @@ gitlab-merge-alert-go/
 
 **GitLab 集成** (敏感信息):
 - `GMA_GITLAB_URL` - GitLab 服务器地址
-- `GMA_GITLAB_PERSONAL_ACCESS_TOKEN` - GitLab 个人访问令牌
 - `GMA_DEFAULT_WEBHOOK_URL` - 默认企业微信机器人地址
+- `GMA_ENCRYPTION_KEY` - 敏感数据加密密钥（若未设置则回退到 `JWT_SECRET`）
+
+> 注意：GitLab Personal Access Token 需要在应用的账户管理或个人中心页面中配置，不再通过环境变量或配置文件提供。
 
 **服务配置**:
 - `GMA_REDIRECT_SERVER_URL` - 重定向服务器地址

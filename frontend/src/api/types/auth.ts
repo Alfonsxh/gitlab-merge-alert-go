@@ -24,6 +24,7 @@ export interface AccountResponse {
   last_login_at?: string
   created_at: string
   updated_at: string
+  has_gitlab_personal_access_token: boolean
 }
 
 export interface CreateAccountRequest {
@@ -31,10 +32,12 @@ export interface CreateAccountRequest {
   password: string
   email: string
   role?: string
+  gitlab_personal_access_token?: string
 }
 
 export interface UpdateAccountRequest {
   email?: string
   role?: string
   is_active?: boolean
+  gitlab_personal_access_token?: string
 }

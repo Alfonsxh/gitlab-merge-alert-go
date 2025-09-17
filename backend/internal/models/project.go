@@ -63,7 +63,7 @@ type ProjectResponse struct {
 // ParseProjectURLRequest 解析GitLab项目URL的请求结构
 type ParseProjectURLRequest struct {
 	URL         string `json:"url" binding:"required,url"`
-	AccessToken string `json:"access_token" binding:"required"`
+	AccessToken string `json:"access_token"`
 }
 
 // ParseProjectURLResponse 解析GitLab项目URL的响应结构
@@ -80,7 +80,7 @@ type ParseProjectURLResponse struct {
 // GitLabConnectionTestRequest 测试GitLab连接的请求结构
 type GitLabConnectionTestRequest struct {
 	URL         string `json:"url" binding:"required,url"`
-	AccessToken string `json:"access_token" binding:"required"`
+	AccessToken string `json:"access_token"`
 }
 
 // GitLabConnectionTestResponse 测试GitLab连接的响应结构
@@ -92,7 +92,7 @@ type GitLabConnectionTestResponse struct {
 // ScanGroupProjectsRequest 扫描组项目的请求结构
 type ScanGroupProjectsRequest struct {
 	URL         string `json:"url" binding:"required,url"`
-	AccessToken string `json:"access_token" binding:"required"`
+	AccessToken string `json:"access_token"`
 }
 
 // ScanGroupProjectsResponse 扫描组项目的响应结构

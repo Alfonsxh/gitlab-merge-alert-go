@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 	"time"
-	
+
 	"gitlab-merge-alert-go/internal/config"
 	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/services"
@@ -25,10 +25,10 @@ type Handler struct {
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Handler {
-	gitlabService := services.NewGitLabService(cfg.GitLabURL, cfg.GitLabPersonalAccessToken)
+	gitlabService := services.NewGitLabService(cfg.GitLabURL, "")
 	wechatService := services.NewWeChatService()
 	notifyService := services.NewNotificationService(db, wechatService)
-	
+
 	// 使用配置中的 JWT 设置，如果没有则使用默认值
 	jwtSecret := cfg.JWTSecret
 	if jwtSecret == "" {
@@ -38,7 +38,7 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 	if jwtDuration == 0 {
 		jwtDuration = 24 * time.Hour // 默认 24 小时
 	}
-	
+
 	authService := services.NewAuthService(db, jwtSecret, jwtDuration)
 	authMiddleware := middleware.NewAuthMiddleware(jwtSecret)
 	ownershipChecker := middleware.NewOwnershipChecker(db)
@@ -79,4 +79,3 @@ func (h *Handler) GetAuthMiddleware() *middleware.AuthMiddleware {
 func (h *Handler) GetOwnershipChecker() *middleware.OwnershipChecker {
 	return h.ownershipChecker
 }
-

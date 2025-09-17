@@ -5,13 +5,15 @@ import (
 	"net/http"
 	"strings"
 
-	"gitlab-merge-alert-go/internal/models"
 	"github.com/gin-gonic/gin"
+	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/pkg/logger"
+	"gitlab-merge-alert-go/pkg/security"
 )
 
 func (h *Handler) UpdateProfile(c *gin.Context) {
 	accountID := c.GetUint("account_id")
-	
+
 	var req models.UpdateProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -29,6 +31,20 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 	if req.Avatar != "" {
 		updates["avatar"] = req.Avatar
+	}
+	if req.GitLabPersonalAccessToken != nil {
+		token := strings.TrimSpace(*req.GitLabPersonalAccessToken)
+		if token == "" {
+			updates["gitlab_access_token"] = ""
+		} else {
+			encrypted, err := security.Encrypt(h.config.EncryptionKey, token)
+			if err != nil {
+				logger.GetLogger().Errorf("Failed to encrypt GitLab token for account %d: %v", accountID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "加密GitLab Token失败"})
+				return
+			}
+			updates["gitlab_access_token"] = encrypted
+		}
 	}
 
 	if len(updates) == 0 {
@@ -55,7 +71,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 
 func (h *Handler) UploadAvatar(c *gin.Context) {
 	accountID := c.GetUint("account_id")
-	
+
 	file, header, err := c.Request.FormFile("avatar")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无法获取上传文件"})
@@ -89,7 +105,6 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "头像上传成功",
-		"avatar": dataURI,
+		"avatar":  dataURI,
 	})
 }
-

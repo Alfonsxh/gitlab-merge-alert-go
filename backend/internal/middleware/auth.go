@@ -38,10 +38,9 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := m.extractToken(c)
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": "Missing authorization token",
 			})
-			c.Abort()
 			return
 		}
 
@@ -49,15 +48,14 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		claims, err := m.jwtManager.Verify(token)
 		if err != nil {
 			if err == auth.ErrExpiredToken {
-				c.JSON(http.StatusUnauthorized, gin.H{
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 					"error": "Token has expired",
 				})
 			} else {
-				c.JSON(http.StatusUnauthorized, gin.H{
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 					"error": "Invalid token",
 				})
 			}
-			c.Abort()
 			return
 		}
 
@@ -73,18 +71,16 @@ func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get(ContextKeyRole)
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": "Unauthorized",
 			})
-			c.Abort()
 			return
 		}
 
 		if role != models.RoleAdmin {
-			c.JSON(http.StatusForbidden, gin.H{
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": "Admin access required",
 			})
-			c.Abort()
 			return
 		}
 

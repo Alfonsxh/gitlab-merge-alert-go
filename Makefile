@@ -5,11 +5,15 @@ APP_NAME=gitlab-merge-alert-go
 
 # 构建应用
 build: frontend-build
-	go build -o bin/$(APP_NAME) ./cmd/server
+	@echo "Building backend with embedded frontend..."
+	cd backend && go build -tags embed -o ../bin/$(APP_NAME) ./cmd/server
+	@echo "Cleaning up temporary frontend files..."
+	rm -rf backend/internal/web/frontend_dist
+	@echo "Build complete: bin/$(APP_NAME)"
 
 # 运行应用（后端）
 run:
-	go run ./cmd/server
+	cd backend && go run ./cmd/server
 
 # 开发模式（同时运行前后端）
 dev:
@@ -18,7 +22,7 @@ dev:
 
 # 运行测试
 test:
-	go test -v ./...
+	cd backend && go test -v ./...
 
 # 清理
 clean:
@@ -28,16 +32,16 @@ clean:
 
 # 安装依赖
 deps:
-	go mod download
-	go mod tidy
+	cd backend && go mod download && go mod tidy
+	cd frontend && npm install
 
 # 格式化代码
 fmt:
-	go fmt ./...
+	cd backend && go fmt ./...
 
 # 代码检查
 lint:
-	golangci-lint run
+	cd backend && golangci-lint run
 
 # 构建Docker镜像
 docker-build:
@@ -78,17 +82,17 @@ init:
 # 运行数据库迁移
 migrate:
 	@echo "Running database migrations..."
-	@go run cmd/migrate/main.go
+	@cd backend && go run cmd/migrate/main.go
 
 # 查看迁移状态
 migrate-status:
 	@echo "Checking migration status..."
-	@go run cmd/migrate/main.go -status
+	@cd backend && go run cmd/migrate/main.go -status
 
 # 回滚最后一个迁移
 migrate-rollback:
 	@echo "Rolling back last migration..."
-	@go run cmd/migrate/main.go -rollback
+	@cd backend && go run cmd/migrate/main.go -rollback
 
 # 前端相关命令
 frontend-install:
@@ -101,3 +105,6 @@ frontend-build:
 	@echo "Building frontend..."
 	cd frontend && npm install && npm run build
 	@echo "Frontend build complete"
+	@echo "Copying frontend dist to backend for embedding..."
+	rm -rf backend/internal/web/frontend_dist
+	cp -r frontend/dist backend/internal/web/frontend_dist

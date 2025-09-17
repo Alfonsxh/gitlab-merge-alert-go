@@ -1,5 +1,21 @@
 <template>
   <el-container class="layout-container">
+    <!-- GitLab Token 警告条幅 -->
+    <el-alert
+      v-if="!authStore.hasGitLabToken && showTokenWarning"
+      class="token-warning-banner"
+      type="warning"
+      :closable="true"
+      @close="showTokenWarning = false"
+    >
+      <template #default>
+        <div class="warning-content">
+          <span>账户未设置 GitLab Personal Access Token，部分功能可能无法正常使用</span>
+          <el-button size="small" type="primary" @click="goToProfile">立即配置</el-button>
+        </div>
+      </template>
+    </el-alert>
+
     <el-header class="layout-header">
       <div class="header-content">
         <div class="logo">
@@ -84,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -107,12 +123,27 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const isCollapse = ref(false)
+const showTokenWarning = ref(true)
 
 const activeMenu = computed(() => route.path)
 
 const handleRefresh = () => {
   location.reload()
 }
+
+const goToProfile = () => {
+  router.push('/profile')
+  showTokenWarning.value = false
+}
+
+// 页面加载时获取最新的用户信息
+onMounted(async () => {
+  try {
+    await authStore.fetchProfile()
+  } catch (error) {
+    console.error('Failed to fetch profile:', error)
+  }
+})
 
 const handleCommand = async (command: string) => {
   switch (command) {
@@ -141,6 +172,37 @@ const handleCommand = async (command: string) => {
   height: 100vh;
   background-color: #f5f7fa;
   overflow: hidden;
+  position: relative;
+}
+
+.token-warning-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  border-radius: 0;
+  border: none;
+  box-shadow: 0 2px 8px rgba(230, 162, 60, 0.15);
+
+  :deep(.el-alert__content) {
+    padding: 8px 16px;
+  }
+
+  .warning-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+
+    span {
+      font-weight: 500;
+    }
+
+    .el-button {
+      margin-left: 16px;
+    }
+  }
 }
 
 .layout-header {

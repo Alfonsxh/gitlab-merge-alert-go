@@ -4,10 +4,13 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
 	"gitlab-merge-alert-go/pkg/auth"
+	"gitlab-merge-alert-go/pkg/logger"
+	"gitlab-merge-alert-go/pkg/security"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,10 +19,10 @@ import (
 // GetAccounts 获取账户列表（仅管理员）
 func (h *Handler) GetAccounts(c *gin.Context) {
 	var accounts []models.Account
-	
+
 	// 构建查询
 	query := h.db.Model(&models.Account{})
-	
+
 	// 分页参数
 	page := 1
 	pageSize := 20
@@ -33,41 +36,41 @@ func (h *Handler) GetAccounts(c *gin.Context) {
 			pageSize = val
 		}
 	}
-	
+
 	// 搜索参数
 	if search := c.Query("search"); search != "" {
 		query = query.Where("username LIKE ? OR email LIKE ?", "%"+search+"%", "%"+search+"%")
 	}
-	
+
 	// 角色过滤
 	if role := c.Query("role"); role != "" {
 		query = query.Where("role = ?", role)
 	}
-	
+
 	// 获取总数
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count accounts"})
 		return
 	}
-	
+
 	// 获取数据
 	offset := (page - 1) * pageSize
 	if err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&accounts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get accounts"})
 		return
 	}
-	
+
 	// 转换为响应格式
 	var responses []models.AccountResponse
 	for _, account := range accounts {
 		responses = append(responses, *account.ToResponse())
 	}
-	
+
 	h.response.Success(c, gin.H{
-		"total": total,
-		"data":  responses,
-		"page":  page,
+		"total":     total,
+		"data":      responses,
+		"page":      page,
 		"page_size": pageSize,
 	})
 }
@@ -79,12 +82,12 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
 		return
 	}
-	
+
 	// 如果没有指定角色，默认为普通用户
 	if req.Role == "" {
 		req.Role = models.RoleUser
 	}
-	
+
 	// 检查用户名是否已存在
 	var count int64
 	if err := h.db.Model(&models.Account{}).Where("username = ?", req.Username).Count(&count).Error; err != nil {
@@ -95,7 +98,7 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
 		return
 	}
-	
+
 	// 检查邮箱是否已存在
 	if err := h.db.Model(&models.Account{}).Where("email = ?", req.Email).Count(&count).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
@@ -105,7 +108,7 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
 		return
 	}
-	
+
 	// 加密密码
 	passwordManager := auth.NewPasswordManager()
 	passwordHash, err := passwordManager.HashPassword(req.Password)
@@ -113,7 +116,7 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
-	
+
 	// 创建账户
 	account := &models.Account{
 		Username:     req.Username,
@@ -122,12 +125,22 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 		Role:         req.Role,
 		IsActive:     true,
 	}
-	
+
+	if token := strings.TrimSpace(req.GitLabPersonalAccessToken); token != "" {
+		encrypted, err := security.Encrypt(h.config.EncryptionKey, token)
+		if err != nil {
+			logger.GetLogger().Errorf("Failed to encrypt GitLab token for account %s: %v", req.Username, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加密GitLab Token失败"})
+			return
+		}
+		account.GitLabAccessToken = encrypted
+	}
+
 	if err := h.db.Create(account).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create account"})
 		return
 	}
-	
+
 	h.response.Success(c, account.ToResponse())
 }
 
@@ -139,13 +152,13 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid account ID"})
 		return
 	}
-	
+
 	var req models.UpdateAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
 		return
 	}
-	
+
 	// 获取账户
 	var account models.Account
 	if err := h.db.First(&account, accountID).Error; err != nil {
@@ -156,7 +169,7 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
-	
+
 	// 更新字段
 	updates := make(map[string]interface{})
 	if req.Email != "" && req.Email != account.Email {
@@ -172,7 +185,7 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 		}
 		updates["email"] = req.Email
 	}
-	
+
 	if req.Role != "" && req.Role != account.Role {
 		// 不能移除最后一个管理员
 		if account.Role == models.RoleAdmin && req.Role != models.RoleAdmin {
@@ -188,7 +201,7 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 		}
 		updates["role"] = req.Role
 	}
-	
+
 	if req.IsActive != nil {
 		// 不能禁用最后一个管理员
 		if account.Role == models.RoleAdmin && !*req.IsActive {
@@ -204,21 +217,36 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 		}
 		updates["is_active"] = *req.IsActive
 	}
-	
+
 	// 执行更新
+	if req.GitLabPersonalAccessToken != nil {
+		token := strings.TrimSpace(*req.GitLabPersonalAccessToken)
+		if token == "" {
+			updates["gitlab_access_token"] = ""
+		} else {
+			encrypted, err := security.Encrypt(h.config.EncryptionKey, token)
+			if err != nil {
+				logger.GetLogger().Errorf("Failed to encrypt GitLab token for account %d: %v", account.ID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "加密GitLab Token失败"})
+				return
+			}
+			updates["gitlab_access_token"] = encrypted
+		}
+	}
+
 	if len(updates) > 0 {
 		if err := h.db.Model(&account).Updates(updates).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account"})
 			return
 		}
 	}
-	
+
 	// 重新加载账户数据
 	if err := h.db.First(&account, accountID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reload account"})
 		return
 	}
-	
+
 	h.response.Success(c, account.ToResponse())
 }
 
@@ -230,16 +258,16 @@ func (h *Handler) DeleteAccount(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid account ID"})
 		return
 	}
-	
+
 	// 获取当前登录用户ID
 	currentAccountID, _ := middleware.GetAccountID(c)
-	
+
 	// 不能删除自己的账户
 	if uint(accountID) == currentAccountID {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete your own account"})
 		return
 	}
-	
+
 	// 获取要删除的账户
 	var account models.Account
 	if err := h.db.First(&account, accountID).Error; err != nil {
@@ -250,7 +278,7 @@ func (h *Handler) DeleteAccount(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
-	
+
 	// 不能删除最后一个管理员
 	if account.Role == models.RoleAdmin {
 		var adminCount int64
@@ -263,13 +291,13 @@ func (h *Handler) DeleteAccount(c *gin.Context) {
 			return
 		}
 	}
-	
+
 	// 删除账户
 	if err := h.db.Delete(&account).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete account"})
 		return
 	}
-	
+
 	h.response.Success(c, gin.H{"message": "Account deleted successfully"})
 }
 
@@ -281,16 +309,16 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid account ID"})
 		return
 	}
-	
+
 	var req struct {
 		NewPassword string `json:"new_password" binding:"required,min=6"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
 		return
 	}
-	
+
 	// 获取账户
 	var account models.Account
 	if err := h.db.First(&account, accountID).Error; err != nil {
@@ -301,7 +329,7 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
-	
+
 	// 加密新密码
 	passwordManager := auth.NewPasswordManager()
 	passwordHash, err := passwordManager.HashPassword(req.NewPassword)
@@ -309,12 +337,12 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
-	
+
 	// 更新密码
 	if err := h.db.Model(&account).Update("password_hash", passwordHash).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
 		return
 	}
-	
+
 	h.response.Success(c, gin.H{"message": "Password reset successfully"})
 }

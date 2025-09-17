@@ -14,6 +14,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.role === 'admin')
   const username = computed(() => user.value?.username || '')
   const email = computed(() => user.value?.email || '')
+  const hasGitLabToken = computed(() => !!user.value?.has_gitlab_personal_access_token)
 
   const login = async (username: string, password: string) => {
     try {
@@ -144,6 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     username,
     email,
+    hasGitLabToken,
     
     // Actions
     login,

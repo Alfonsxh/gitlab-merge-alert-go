@@ -4,14 +4,23 @@
 - 🚀 [快速开始](#快速开始) - 5分钟上手
 - 🏗️ [项目结构](#项目结构) - 理解项目架构  
 - 📝 [开发命令](#开发命令) - 开发必备命令
+- 🔄 [核心业务流程](#核心业务流程) - 通知处理机制
+- 🏛️ [架构决策](#架构决策记录adr) - 重要设计决策
+- 🌐 [API 文档](#api-文档) - 接口详细说明
+- ❓ [常见问题](#常见问题解决方案) - 故障排查指南
 - ⚠️ [注意事项](#注意事项) - 必须遵守的规则
 - 🔧 [核心目录说明](#核心目录说明) - 目录功能详解
-- 🌐 [API 文档](#api-文档) - 接口详细说明
-- 🔄 [核心业务流程](#核心业务流程) - 通知处理机制
 
 ## 项目概述
 
 这是一个 GitLab Merge Request 通知服务的 Go 语言重构版本，采用 B/S 架构，用于将 GitLab 的合并请求通知发送到企业微信群机器人。支持多项目、多 Webhook 管理，具备完整的用户认证和权限管理系统。
+
+### 核心功能
+- **GitLab 集成**：自动接收并处理 Merge Request 事件
+- **企业微信通知**：支持多机器人、多群组配置
+- **项目管理**：批量导入、URL 解析、组扫描
+- **用户系统**：JWT 认证、角色权限、资源隔离
+- **Web 管理界面**：Vue.js 单页应用，响应式设计
 
 ## 关键信息
 
@@ -25,6 +34,8 @@
 | 数据库 | SQLite (`data/gitlab-merge-alert.db`) |
 | API 前缀 | `/api/v1` |
 | GitLab Webhook | `POST /api/v1/webhook/gitlab` |
+| JWT 有效期 | 24小时 |
+| 默认管理员 | admin / admin123 (首次启动自动创建) |
 
 ## 技术栈
 
@@ -85,55 +96,85 @@ gitlab-merge-alert-go/
 
 ## 快速开始
 
-### 安装依赖
-```bash
-# 后端依赖
-make deps          # 安装 Go 依赖并整理模块
+### 前置要求
+- Go 1.23+
+- Node.js 18+
+- Make 工具
+- Git
 
-# 前端依赖
-cd frontend && npm install
+### 1. 克隆项目
+```bash
+git clone https://github.com/your-org/gitlab-merge-alert-go.git
+cd gitlab-merge-alert-go
 ```
 
-### 配置环境
+### 2. 安装依赖
+```bash
+# 安装所有依赖（后端 + 前端）
+make deps && cd frontend && npm install && cd ..
+```
+
+### 3. 配置环境
 ```bash
 # 复制配置文件模板
 cp config.example.yaml config.local.yaml
 
 # 编辑 config.local.yaml，填入真实配置
-# 重点配置项：
-# - gitlab_url: GitLab 服务器地址
-# - gitlab_personal_access_token: GitLab 访问令牌
-# - jwt_secret: JWT 密钥（用于用户认证）
+vim config.local.yaml
 ```
 
-### 开发环境
+**必须配置的项目**：
+```yaml
+# GitLab 配置
+gitlab_url: "https://gitlab.example.com"
+
+# JWT 配置（生产环境必须更改）
+jwt_secret: "your-super-secret-key-at-least-32-chars"
+
+# 数据加密密钥（用于加密 GitLab Token 等敏感信息）
+encryption_key: "a-32-characters-long-secret"
+
+# 公开 Webhook URL（GitLab 回调地址）
+public_webhook_url: "https://your-domain.com"
+```
+
+> 注意：GitLab Personal Access Token 需要在应用启动后，通过「账户管理」或「个人中心」页面配置，而非直接写入配置文件。
+
+### 4. 初始化并启动
 ```bash
-# 初始化数据和日志目录
+# 初始化数据目录和数据库
 make init
 
-# 启动后端开发服务器 (localhost:1688)
-make run
+# 启动开发服务器（前后端同时启动）
+make dev
 
-# 启动前端开发服务器 (另开终端)
-cd frontend && npm run dev
+# 或分别启动
+make run                    # 后端 (localhost:1688)
+cd frontend && npm run dev  # 前端 (localhost:5173)
 ```
 
-### 构建项目
+### 5. 访问系统
+- 打开浏览器访问：http://localhost:1688
+- 默认管理员账号：admin / admin123
+- 首次登录后请立即修改密码
+
+### 6. 配置 GitLab Webhook
+1. 登录系统后，进入"项目管理"
+2. 添加 GitLab 项目
+3. 点击"同步 GitLab Webhook"
+4. 或手动在 GitLab 项目设置中添加：
+   - URL: `http://your-server:1688/api/v1/webhook/gitlab`
+   - Secret Token: 留空
+   - Trigger: Merge request events
+
+### 构建生产版本
 ```bash
-# 构建后端二进制文件
-make build         # 输出到 bin/gitlab-merge-alert-go
+# 完整构建（前端 + 后端）
+make build
 
-# 构建前端
-cd frontend && npm run build
-```
-
-### 运行测试
-```bash
-# 运行后端测试
-make test
-
-# 运行代码检查
-make lint
+# Docker 构建
+make docker-build
+make docker-run
 ```
 
 ## 开发命令
@@ -205,43 +246,81 @@ npm run preview    # 预览生产构建
 ## 核心业务流程
 
 ### GitLab Webhook 处理流程
-```
+```mermaid
 GitLab 推送 Webhook
        ↓
 HandleGitLabWebhook (handlers/webhook.go:13)
+    ├─ 解析 JSON 数据
+    ├─ 记录完整日志
+    └─ 验证事件类型
        ↓
-验证事件类型（只处理 merge_request）
+[只处理 merge_request + opened 状态]
        ↓
 ProcessMergeRequest (services/notification.go:25)
+    ├─ 查找项目配置（GitLab Project ID）
+    ├─ 加载关联的 Webhooks
+    └─ 提取指派人信息
        ↓
-查找项目配置（根据 GitLab 项目 ID）
+格式化企业微信消息
+    ├─ Markdown 格式
+    ├─ @指派人手机号
+    └─ 包含 MR 链接
        ↓
-获取指派人信息（邮箱映射到企业微信手机号）
+批量发送通知
+    ├─ 遍历所有关联的机器人
+    ├─ 异步发送避免阻塞
+    └─ 记录发送结果
        ↓
-格式化消息（Markdown 格式）
-       ↓
-发送到关联的企业微信机器人
-       ↓
-记录通知历史
+保存通知历史
+    └─ 包含成功/失败状态
 ```
 
 ### 用户认证流程
+```mermaid
+用户登录请求
+    ├─ 用户名
+    └─ 密码
+       ↓
+验证账号 (services/auth.go)
+    ├─ 查询账号表
+    ├─ bcrypt 验证密码
+    └─ 检查账号状态
+       ↓
+生成 JWT Token
+    ├─ 包含: user_id, username, role
+    ├─ 有效期: 24小时
+    └─ 签名: HMAC-SHA256
+       ↓
+返回响应
+    ├─ token 字符串
+    ├─ expires_at 时间戳
+    └─ 用户信息
+       ↓
+前端处理
+    ├─ localStorage 存储 token
+    ├─ Axios 拦截器自动附加
+    └─ 401 响应自动跳转登录
 ```
-用户登录（用户名/密码）
+
+### 项目-Webhook 关联流程
+```mermaid
+创建项目
+    └─ 输入 GitLab URL 或 Project ID
        ↓
-验证账号信息 (services/auth.go)
+解析项目信息
+    ├─ 调用 GitLab API
+    └─ 获取项目名称、路径
        ↓
-生成 JWT Token（24小时有效期）
+创建 Webhook
+    └─ 输入企业微信机器人 URL
        ↓
-前端存储 Token
+建立关联 (多对多)
+    ├─ 一个项目 → 多个机器人
+    └─ 一个机器人 → 多个项目
        ↓
-请求携带 Token（Authorization: Bearer xxx）
-       ↓
-中间件验证 Token (middleware/auth.go)
-       ↓
-提取用户信息和角色
-       ↓
-权限检查（管理员/普通用户）
+同步 GitLab (可选)
+    ├─ 自动在 GitLab 创建 Webhook
+    └─ 配置 Merge Request 事件
 ```
 
 ## API 文档
@@ -299,49 +378,156 @@ ProcessMergeRequest (services/notification.go:25)
 ## 常见问题解决方案
 
 ### Q: GitLab Webhook 无法送达
+**症状**：GitLab 显示 webhook 发送失败，系统未收到通知
+
 **检查步骤**：
-1. 确认 GitLab 能访问到服务地址
-2. 检查 GitLab webhook 配置是否正确
-3. 查看日志文件 `logs/app.log`
+```bash
+# 1. 检查服务是否运行
+curl http://localhost:1688/api/v1/health
+
+# 2. 查看最近的日志
+tail -f logs/app.log | grep webhook
+
+# 3. 测试 webhook 端点
+curl -X POST http://localhost:1688/api/v1/webhook/gitlab \
+  -H "Content-Type: application/json" \
+  -d '{"object_kind":"merge_request"}'
+```
 
 **解决方案**：
-- 确保 `public_webhook_url` 配置正确
-- 检查防火墙设置
-- 使用 `curl` 测试 webhook 端点可达性
+- 确保 `config.yaml` 中 `public_webhook_url` 配置为 GitLab 可访问的地址
+- 检查防火墙是否开放 1688 端口：`sudo ufw allow 1688`
+- 如果使用内网穿透，确保隧道正常运行
+- GitLab 项目设置中检查 Webhook URL 是否正确
 
 ### Q: 企业微信通知发送失败
+**症状**：日志显示通知发送失败，群里收不到消息
+
 **检查步骤**：
-1. 检查企业微信机器人 webhook URL 是否正确
-2. 查看通知历史中的错误信息
-3. 验证用户邮箱是否已映射手机号
+```bash
+# 1. 查看通知错误日志
+grep "notification failed" logs/app.log
+
+# 2. 测试机器人 URL
+curl -X POST https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY \
+  -H "Content-Type: application/json" \
+  -d '{"msgtype":"text","text":{"content":"测试消息"}}'
+
+# 3. 检查数据库中的通知记录
+sqlite3 data/gitlab-merge-alert.db "SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5;"
+```
 
 **解决方案**：
-- 在 Webhook 管理页面更新正确的机器人地址
-- 在用户管理页面设置邮箱-手机号映射
-- 检查企业微信机器人是否被禁用
+- 在 Webhook 管理页面更新正确的机器人 URL
+- 确保机器人 URL 中的 key 参数正确
+- 在用户管理页面设置 GitLab 邮箱到企业微信手机号的映射
+- 检查企业微信机器人是否被管理员禁用或删除
+- 确认消息格式符合企业微信 Markdown 要求
 
 ### Q: 数据库迁移失败
-**检查步骤**：
-1. `make migrate-status` 查看当前迁移状态
-2. 检查数据库文件权限
+**症状**：启动时报数据库错误，表结构不匹配
 
-**解决方案**：
-- `make migrate-rollback` 回滚失败的迁移
-- 确保 `data/` 目录有写权限
-- 必要时删除数据库重新初始化：`rm data/*.db && make init`
-
-### Q: 前端构建失败
 **检查步骤**：
-1. 检查 Node.js 版本（需要 18+）
-2. 清理 node_modules 重新安装
+```bash
+# 1. 查看迁移状态
+make migrate-status
+
+# 2. 检查数据库文件权限
+ls -la data/gitlab-merge-alert.db
+
+# 3. 查看迁移历史
+sqlite3 data/gitlab-merge-alert.db "SELECT * FROM schema_migrations;"
+```
 
 **解决方案**：
 ```bash
+# 方案1：回滚最后的迁移
+make migrate-rollback
+
+# 方案2：重置数据库（会丢失数据）
+mv data/gitlab-merge-alert.db data/gitlab-merge-alert.db.bak
+make init
+make migrate
+
+# 方案3：手动修复权限
+chmod 666 data/gitlab-merge-alert.db
+chown $(whoami) data/gitlab-merge-alert.db
+```
+
+### Q: 前端页面无法访问
+**症状**：后端正常但前端页面 404 或空白
+
+**检查步骤**：
+```bash
+# 1. 检查前端是否构建
+ls -la frontend/dist/
+
+# 2. 检查静态文件服务
+curl http://localhost:1688/assets/index.js
+
+# 3. 查看浏览器控制台错误
+# F12 打开开发者工具查看 Console 和 Network
+```
+
+**解决方案**：
+```bash
+# 重新构建前端
 cd frontend
-rm -rf node_modules package-lock.json
 npm install
 npm run build
+cd ..
+
+# 重启服务
+make build
+make run
+
+# 开发模式（前后端分离）
+make run                    # 终端1：后端
+cd frontend && npm run dev  # 终端2：前端
 ```
+
+### Q: JWT Token 认证失败
+**症状**：登录后仍然提示未授权，频繁跳转登录页
+
+**检查步骤**：
+```bash
+# 1. 检查 JWT 配置
+grep jwt_secret config.local.yaml
+
+# 2. 查看认证错误日志
+grep "JWT" logs/app.log
+
+# 3. 检查浏览器 localStorage
+# 浏览器控制台执行：localStorage.getItem('token')
+```
+
+**解决方案**：
+- 确保 `jwt_secret` 在所有环境中保持一致
+- 清除浏览器缓存和 localStorage：`localStorage.clear()`
+- 检查系统时间是否正确（Token 有效期验证）
+- 重新登录获取新 Token
+
+### Q: 项目无法批量导入
+**症状**：扫描 GitLab 组时无项目返回或报错
+
+**检查步骤**：
+```bash
+# 1. 测试 GitLab 连接
+curl -H "PRIVATE-TOKEN: YOUR_TOKEN" \
+  https://gitlab.example.com/api/v4/projects
+
+# 2. 检查 GitLab Token 权限
+# Token 需要 api 或 read_api 权限
+
+# 3. 查看扫描错误日志
+grep "scan group" logs/app.log
+```
+
+**解决方案**：
+- 重新生成 GitLab Personal Access Token，确保具备 `api` 或 `read_api` 权限
+- 在系统「账户管理」或「个人中心」页面更新 GitLab Token
+- 确认 GitLab URL 格式正确（不要带尾部斜杠）
+- 检查用户是否有访问目标组的权限
 
 ## 开发规范
 
@@ -385,9 +571,130 @@ npm run build
 ### pkg/ - 可重用包
 可被其他项目引用的通用包。详见 [pkg/CLAUDE.md](pkg/CLAUDE.md)
 
+## 性能优化建议
+
+### 数据库优化
+- **连接池配置**：调整 GORM 连接池大小
+- **索引优化**：为常用查询字段添加索引
+- **查询优化**：使用 Preload 避免 N+1 查询
+
+### 前端优化
+- **路由懒加载**：按需加载页面组件
+- **图片优化**：使用 WebP 格式，启用懒加载
+- **缓存策略**：合理设置静态资源缓存
+
+### 后端优化
+- **并发处理**：使用 goroutine 池处理通知发送
+- **缓存机制**：Redis 缓存热点数据（可选）
+- **限流保护**：添加 API 访问频率限制
+
+## 监控和日志
+
+### 日志管理
+```bash
+# 查看实时日志
+tail -f logs/app.log
+
+# 按级别过滤
+grep "ERROR" logs/app.log
+
+# 按时间查询
+grep "2024-08-11" logs/app.log
+
+# 日志轮转（使用 logrotate）
+sudo nano /etc/logrotate.d/gitlab-merge-alert
+```
+
+### 健康检查
+```bash
+# API 健康检查
+curl http://localhost:1688/api/v1/health
+
+# 数据库连接检查
+sqlite3 data/gitlab-merge-alert.db "SELECT datetime('now');"
+
+# 进程监控
+ps aux | grep gitlab-merge-alert
+```
+
+### 性能监控
+- 使用 Prometheus + Grafana 监控系统指标
+- 集成 pprof 进行性能分析
+- 添加自定义业务指标
+
+## 安全最佳实践
+
+### 认证安全
+- 使用强 JWT 密钥（至少 32 字符）
+- 定期轮换 Token
+- 实现 Token 刷新机制
+- 添加登录失败限制
+
+### 数据安全
+- 敏感配置使用环境变量
+- 数据库定期备份
+- 日志脱敏处理
+- HTTPS 传输加密
+
+### 代码安全
+- 定期更新依赖
+- 使用安全扫描工具
+- 代码审查流程
+- 最小权限原则
+
+## 部署建议
+
+### Docker 部署
+```bash
+# 构建镜像
+docker build -t gitlab-merge-alert:latest .
+
+# 运行容器
+docker run -d \
+  --name gitlab-merge-alert \
+  -p 1688:1688 \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/logs:/logs \
+  -v $(pwd)/config.yaml:/config.yaml \
+  gitlab-merge-alert:latest
+```
+
+### Systemd 服务
+```ini
+[Unit]
+Description=GitLab Merge Alert Service
+After=network.target
+
+[Service]
+Type=simple
+User=gitlab-alert
+WorkingDirectory=/opt/gitlab-merge-alert
+ExecStart=/opt/gitlab-merge-alert/bin/gitlab-merge-alert-go
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Nginx 反向代理
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location / {
+        proxy_pass http://127.0.0.1:1688;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
 ## 相关文档
 - [Gin Web Framework](https://gin-gonic.com/)
 - [GORM 文档](https://gorm.io/zh_CN/)
 - [Vue.js 3 文档](https://cn.vuejs.org/)
 - [Element Plus 文档](https://element-plus.org/zh-CN/)
 - [企业微信机器人文档](https://developer.work.weixin.qq.com/document/path/91770)
+- [GitLab API 文档](https://docs.gitlab.com/ee/api/)

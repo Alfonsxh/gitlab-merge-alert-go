@@ -7,7 +7,20 @@
         添加项目
       </el-button>
     </div>
-    
+
+    <el-alert
+      v-if="!hasGitLabToken"
+      class="mb-4"
+      type="warning"
+      show-icon
+      title="未配置 GitLab Personal Access Token"
+    >
+      <template #description>
+        <span>项目操作需要 GitLab 访问令牌，请先前往个人中心或账户管理配置 Token。</span>
+        <el-button type="primary" link @click="goToProfile" style="margin-left: 8px;">立即配置</el-button>
+      </template>
+    </el-alert>
+
     <el-card>
       <el-empty v-if="projects.length === 0" description="还没有添加任何项目" class="empty-container">
         <el-button type="primary" @click="showAddModal">开始添加项目</el-button>
@@ -295,8 +308,10 @@ import {
 import { projectsApi, webhooksApi } from '@/api'
 import type { Project, Webhook } from '@/api'
 import { formatDate } from '@/utils/format'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const projects = ref<Project[]>([])
 const availableWebhooks = ref<Webhook[]>([])
 const loading = ref(false)
@@ -309,6 +324,20 @@ const autoFilled = ref(false)
 const managingProject = ref<Project | null>(null)
 const selectedWebhookIds = ref<number[]>([])
 const activeGroups = ref<string[]>([])
+
+const hasGitLabToken = computed(() => authStore.hasGitLabToken)
+
+const ensureGitLabToken = () => {
+  if (!hasGitLabToken.value) {
+    ElMessage.warning('请先在个人中心配置 GitLab Personal Access Token')
+    return false
+  }
+  return true
+}
+
+const goToProfile = () => {
+  router.push({ path: '/profile' })
+}
 
 const projectFormRef = ref<FormInstance>()
 
@@ -397,6 +426,9 @@ const loadWebhooks = async () => {
 }
 
 const showAddModal = () => {
+  if (!ensureGitLabToken()) {
+    return
+  }
   Object.assign(currentProject, {
     id: undefined,
     name: '',
@@ -419,7 +451,8 @@ const editProject = (project: Project) => {
 
 const parseProjectUrl = async () => {
   if (!currentProject.url || isEditing.value) return
-  
+  if (!ensureGitLabToken()) return
+
   try {
     const res = await projectsApi.parseProjectUrl(currentProject.url)
     if (res.data) {
@@ -436,6 +469,7 @@ const parseProjectUrl = async () => {
 const saveProject = async () => {
   const valid = await projectFormRef.value?.validate().catch(() => false)
   if (!valid) return
+  if (!ensureGitLabToken()) return
   
   submitting.value = true
   try {
@@ -502,6 +536,7 @@ const saveProjectWebhooks = async () => {
 }
 
 const syncGitLabWebhook = async (project: Project) => {
+  if (!ensureGitLabToken()) return
   syncingWebhook.value = project.id
   try {
     await projectsApi.syncGitLabWebhook(project.id)

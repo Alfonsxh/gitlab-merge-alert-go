@@ -73,6 +73,16 @@
             <el-descriptions-item label="注册时间">
               {{ formatDateTime(authStore.user?.created_at) }}
             </el-descriptions-item>
+            <el-descriptions-item label="GitLab Token">
+              <div class="token-status">
+                <el-tag :type="authStore.user?.has_gitlab_personal_access_token ? 'success' : 'info'">
+                  {{ authStore.user?.has_gitlab_personal_access_token ? '已配置' : '未配置' }}
+                </el-tag>
+                <el-button type="primary" link @click="openTokenDialog">
+                  {{ authStore.user?.has_gitlab_personal_access_token ? '更新' : '配置' }}
+                </el-button>
+              </div>
+            </el-descriptions-item>
           </el-descriptions>
         </el-card>
       </el-tab-pane>
@@ -123,6 +133,93 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <el-dialog
+      v-model="showTokenDialog"
+      title="配置 GitLab Personal Access Token"
+      width="600px"
+      :close-on-click-modal="false"
+      class="token-config-dialog"
+    >
+      <div class="dialog-content">
+        <el-alert type="info" :closable="false" style="margin-bottom: 20px;">
+          <template #default>
+            <span>GitLab Personal Access Token 用于授权系统访问 GitLab 项目和管理 Webhook</span>
+          </template>
+        </el-alert>
+
+        <el-form :model="tokenForm" label-width="110px">
+          <el-form-item label="Access Token">
+            <div style="display: flex; gap: 10px; width: 100%;">
+              <el-input
+                v-model="tokenForm.gitlab_personal_access_token"
+                type="password"
+                placeholder="请输入 GitLab Personal Access Token（留空表示清除当前 Token）"
+                show-password
+                clearable
+                style="flex: 1;"
+              />
+              <el-button
+                :icon="Connection"
+                @click="testProfileToken"
+                :loading="tokenTesting"
+              >
+                测试
+              </el-button>
+            </div>
+          </el-form-item>
+        </el-form>
+
+        <div class="token-help-info">
+          <div class="permission-title">
+            <el-icon><InfoFilled /></el-icon>
+            <span>令牌需具备权限：</span>
+          </div>
+          <div class="permission-items">
+            <div class="permission-item">
+              <el-tag size="small">read_api</el-tag>
+              <span>- 读取项目信息</span>
+            </div>
+            <div class="permission-item">
+              <el-tag size="small">api</el-tag>
+              <span>- 管理 Webhook（可选）</span>
+            </div>
+          </div>
+          <div class="help-links">
+            <el-link
+              v-if="gitlabUrl"
+              :href="`${gitlabUrl}/-/user_settings/personal_access_tokens`"
+              target="_blank"
+              type="primary"
+              :underline="false"
+            >
+              <el-icon><Link /></el-icon>
+              前往 GitLab 创建 Token
+            </el-link>
+            <el-link
+              :href="gitlabPatDocUrl"
+              target="_blank"
+              type="info"
+              :underline="false"
+              style="margin-left: 12px;"
+            >
+              <el-icon><Document /></el-icon>
+              查看生成指南
+            </el-link>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showTokenDialog = false">取消</el-button>
+          <el-button type="primary" :loading="tokenLoading" @click="submitToken">
+            <el-icon v-if="!tokenLoading"><Check /></el-icon>
+            保存配置
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -130,9 +227,10 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules, type UploadProps } from 'element-plus'
-import { User, Camera, Edit } from '@element-plus/icons-vue'
+import { User, Camera, Edit, Connection, InfoFilled, Document, Check, Link } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/api/auth'
+import { gitlabApi } from '@/api'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -141,6 +239,9 @@ const activeTab = ref('info')
 const loading = ref(false)
 const passwordFormRef = ref<FormInstance>()
 const editingEmail = ref(false)
+const gitlabUrl = ref('')
+const tokenTesting = ref(false)
+const gitlabPatDocUrl = 'https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html'
 
 // 使用 computed 来动态获取头像，避免初始化时的错误
 const avatarUrl = computed(() => {
@@ -181,6 +282,50 @@ const passwordRules = reactive<FormRules>({
     { required: true, message: '请再次输入新密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' }
   ]
+})
+
+const loadGitLabConfig = async () => {
+  try {
+    const res = await gitlabApi.getConfig()
+    gitlabUrl.value = res.data.gitlab_url
+  } catch (error) {
+    console.error('Failed to fetch GitLab config:', error)
+  }
+}
+
+const testProfileToken = async () => {
+  const token = tokenForm.gitlab_personal_access_token.trim()
+  if (!token && !authStore.user?.has_gitlab_personal_access_token) {
+    ElMessage.warning('请先输入 GitLab Token')
+    return
+  }
+
+  tokenTesting.value = true
+  try {
+    const payload: Record<string, string> = {}
+    if (token) {
+      payload.access_token = token
+    }
+    if (gitlabUrl.value) {
+      payload.gitlab_url = gitlabUrl.value
+    }
+
+    const res: any = await gitlabApi.testToken(payload)
+    const result = res?.data ?? res
+    if (result?.success) {
+      ElMessage.success(result.message || '连接成功')
+    } else {
+      ElMessage.error(result?.message || '连接失败，请检查 Token 或 GitLab 配置')
+    }
+  } finally {
+    tokenTesting.value = false
+  }
+}
+
+const showTokenDialog = ref(false)
+const tokenLoading = ref(false)
+const tokenForm = reactive({
+  gitlab_personal_access_token: ''
 })
 
 const formatDateTime = (dateTime?: string) => {
@@ -259,6 +404,28 @@ const saveEmail = async () => {
   }
 }
 
+const openTokenDialog = () => {
+  tokenForm.gitlab_personal_access_token = ''
+  showTokenDialog.value = true
+}
+
+const submitToken = async () => {
+  tokenLoading.value = true
+  try {
+    await authAPI.updateProfile({
+      gitlab_personal_access_token: tokenForm.gitlab_personal_access_token
+    })
+
+    await authStore.fetchProfile()
+    ElMessage.success(tokenForm.gitlab_personal_access_token ? 'Token 更新成功' : 'Token 已清除')
+    showTokenDialog.value = false
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || 'Token 更新失败')
+  } finally {
+    tokenLoading.value = false
+  }
+}
+
 const beforeAvatarUpload: UploadProps['beforeUpload'] = (rawFile) => {
   if (!rawFile.type.startsWith('image/')) {
     ElMessage.error('只能上传图片文件')
@@ -316,6 +483,8 @@ onMounted(async () => {
   if (route.query.tab === 'password') {
     activeTab.value = 'password'
   }
+
+  loadGitLabConfig()
 })
 </script>
 
@@ -406,6 +575,104 @@ onMounted(async () => {
       font-size: 24px;
       font-weight: 600;
       color: #303133;
+    }
+  }
+}
+
+.token-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-item-help {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 8px;
+}
+
+.token-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  :deep(.el-input) {
+    flex: 1;
+  }
+}
+
+// Token 配置弹框样式
+.token-config-dialog {
+  :deep(.el-dialog__body) {
+    padding: 20px;
+  }
+
+  .dialog-content {
+    .token-help-info {
+      background-color: #f5f7fa;
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-top: 16px;
+
+      .permission-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: #606266;
+        margin-bottom: 8px;
+
+        .el-icon {
+          color: #909399;
+        }
+      }
+
+      .permission-items {
+        padding-left: 22px;
+        margin-bottom: 12px;
+
+        .permission-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: #606266;
+          line-height: 24px;
+
+          .el-tag {
+            flex-shrink: 0;
+          }
+        }
+      }
+
+      .help-links {
+        padding-left: 22px;
+
+        .el-link {
+          font-size: 13px;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+
+          .el-icon {
+            font-size: 14px;
+          }
+        }
+      }
+    }
+  }
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+
+  .el-button {
+    min-width: 100px;
+
+    .el-icon {
+      margin-right: 4px;
     }
   }
 }

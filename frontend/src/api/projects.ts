@@ -34,8 +34,12 @@ export const projectsApi = {
     return apiClient.post('/projects/parse-url', { url })
   },
 
-  scanGroupProjects(url: string, access_token: string) {
-    return apiClient.post('/projects/scan-group', { url, access_token })
+  scanGroupProjects(url: string, access_token?: string) {
+    const payload: Record<string, any> = { url }
+    if (access_token) {
+      payload.access_token = access_token
+    }
+    return apiClient.post('/projects/scan-group', payload)
   },
 
   batchCreateProjects(data: any) {

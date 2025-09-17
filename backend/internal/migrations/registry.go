@@ -14,6 +14,7 @@ func GetAllMigrations() []Migration {
 		&Migration005CreateAccountsTable{},
 		&Migration006AddCreatedByFields{},
 		&Migration007{},
+		&Migration008AddGitLabAccessTokenToAccounts{},
 	}
 }
 

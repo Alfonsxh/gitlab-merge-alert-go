@@ -9,16 +9,16 @@ import (
 )
 
 type Config struct {
-	Host                      string        `mapstructure:"host"`
-	Port                      int           `mapstructure:"port"`
-	Environment               string        `mapstructure:"environment"`
-	LogLevel                  string        `mapstructure:"log_level"`
-	DatabasePath              string        `mapstructure:"database_path"`
-	GitLabURL                 string        `mapstructure:"gitlab_url" json:"-"` // 敏感字段不输出到日志
-	PublicWebhookURL          string        `mapstructure:"public_webhook_url"`
-	GitLabPersonalAccessToken string        `mapstructure:"gitlab_personal_access_token" json:"-"` // 敏感字段不输出到日志
-	JWTSecret                 string        `mapstructure:"jwt_secret" json:"-"`                   // JWT 密钥
-	JWTDuration               time.Duration `mapstructure:"jwt_duration"`                          // JWT 过期时间
+	Host             string        `mapstructure:"host"`
+	Port             int           `mapstructure:"port"`
+	Environment      string        `mapstructure:"environment"`
+	LogLevel         string        `mapstructure:"log_level"`
+	DatabasePath     string        `mapstructure:"database_path"`
+	GitLabURL        string        `mapstructure:"gitlab_url" json:"-"` // 敏感字段不输出到日志
+	PublicWebhookURL string        `mapstructure:"public_webhook_url"`
+	JWTSecret        string        `mapstructure:"jwt_secret" json:"-"` // JWT 密钥
+	JWTDuration      time.Duration `mapstructure:"jwt_duration"`        // JWT 过期时间
+	EncryptionKey    string        `mapstructure:"encryption_key" json:"-"`
 }
 
 // MaskSensitive 返回一个掩码后的配置副本，用于日志输出
@@ -27,11 +27,11 @@ func (c *Config) MaskSensitive() Config {
 	if masked.GitLabURL != "" {
 		masked.GitLabURL = maskURL(masked.GitLabURL)
 	}
-	if masked.GitLabPersonalAccessToken != "" {
-		masked.GitLabPersonalAccessToken = "****"
-	}
 	if masked.JWTSecret != "" {
 		masked.JWTSecret = "****"
+	}
+	if masked.EncryptionKey != "" {
+		masked.EncryptionKey = "****"
 	}
 	return masked
 }
@@ -55,7 +55,8 @@ func maskURL(url string) string {
 func Load() (*Config, error) {
 	// 配置文件查找优先级：config.local.yaml > config.yaml > 环境变量
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
+	viper.AddConfigPath(".")           // 当前目录（backend 目录运行时）
+	viper.AddConfigPath("..")          // 父目录（从项目根目录找配置）
 	viper.AddConfigPath("./configs")
 	viper.AddConfigPath("/etc/gitlab-merge-alert")
 
@@ -64,7 +65,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("port", 1688)
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("log_level", "info")
-	viper.SetDefault("database_path", "./data/gitlab-merge-alert.db")
+	viper.SetDefault("database_path", "../data/gitlab-merge-alert.db")
 	viper.SetDefault("jwt_duration", "24h")
 
 	// 环境变量绑定（优先级最高）
@@ -93,6 +94,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("解析配置失败: %w", err)
 	}
 
+	if config.EncryptionKey == "" {
+		config.EncryptionKey = config.JWTSecret
+	}
+
 	// 验证必要的敏感配置
 	if err := validateConfig(&config); err != nil {
 		return nil, err
@@ -107,6 +112,9 @@ func validateConfig(config *Config) error {
 
 	if config.GitLabURL == "" || config.GitLabURL == "https://your-gitlab-server.com" {
 		missingFields = append(missingFields, "gitlab_url (GitLab服务器地址)")
+	}
+	if config.EncryptionKey == "" {
+		missingFields = append(missingFields, "encryption_key (数据加密密钥)")
 	}
 
 	if len(missingFields) > 0 {
