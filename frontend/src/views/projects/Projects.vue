@@ -146,12 +146,13 @@
       </div>
     </el-card>
     
-    <!-- 添加/编辑项目对话框 -->
+    <!-- 添加/编辑项目对话框（支持单项目和批量导入） -->
     <el-dialog
       v-model="projectModalVisible"
-      :title="isEditing ? '编辑项目' : '添加项目'"
-      width="650px"
+      :title="isGroupMode ? `批量导入 - ${groupInfo?.name || ''}` : (isEditing ? '编辑项目' : '添加项目')"
+      :width="isGroupMode ? '80%' : '650px'"
       :close-on-click-modal="false"
+      @closed="handleDialogClose"
     >
       <el-form
         ref="projectFormRef"
@@ -159,66 +160,155 @@
         :rules="projectRules"
         label-width="140px"
       >
-        <el-form-item label="项目URL" prop="url">
+        <!-- URL输入区域（两种模式共用，编辑时不显示） -->
+        <el-form-item label="项目URL" prop="url" v-if="!isEditing">
           <el-input
             v-model="currentProject.url"
-            placeholder="例如: https://gitlab.com/group/project"
+            placeholder="输入项目或组的GitLab URL"
+            :disabled="parsingUrl"
             @blur="parseProjectUrl"
           >
             <template #prefix>
               <el-icon><Link /></el-icon>
             </template>
-          </el-input>
-          <div class="form-item-help">
-            输入项目URL后，系统会自动解析项目信息
-          </div>
-        </el-form-item>
-        
-        <el-form-item label="项目名称" prop="name">
-          <el-input
-            v-model="currentProject.name"
-            placeholder="项目名称"
-            :disabled="autoFilled"
-          >
-            <template #prefix>
-              <el-icon><FolderOpened /></el-icon>
+            <template #suffix v-if="parsingUrl">
+              <el-icon class="is-loading"><Loading /></el-icon>
             </template>
           </el-input>
-        </el-form-item>
-        
-        <el-form-item label="GitLab项目ID" prop="gitlab_project_id">
-          <el-input-number
-            v-model="currentProject.gitlab_project_id"
-            :min="1"
-            placeholder="GitLab项目ID"
-            :disabled="autoFilled"
-            style="width: 100%"
-          />
-        </el-form-item>
-        
-        <el-form-item label="项目描述" prop="description">
-          <el-input
-            v-model="currentProject.description"
-            type="textarea"
-            :rows="3"
-            placeholder="项目描述（可选）"
-          />
-        </el-form-item>
-        
-        <el-form-item label="自动管理Webhook">
-          <div style="display: flex; align-items: center; width: 100%;">
-            <el-switch v-model="currentProject.auto_manage_webhook" style="margin-right: 12px;" />
-            <span style="font-size: 13px; color: #909399; line-height: 1.2;">
-              开启后，系统会自动在GitLab上创建和管理Webhook
+          <div class="form-item-help">
+            <span v-if="!parsingUrl">支持项目URL或组URL</span>
+            <span v-else style="color: #409eff">
+              <el-icon class="is-loading" style="margin-right: 4px; vertical-align: middle;"><Loading /></el-icon>
+              正在检测URL类型...
             </span>
           </div>
         </el-form-item>
+
+        <!-- 解析中状态 -->
+        <div v-if="parsingUrl && !isEditing" class="parsing-container">
+          <el-icon class="is-loading" :size="48" color="#409eff"><Loading /></el-icon>
+          <p>正在解析URL，请稍候...</p>
+        </div>
+
+        <!-- 组模式：显示项目列表 -->
+        <template v-if="isGroupMode && !parsingUrl">
+          <el-alert type="info" :closable="false" class="mb-4">
+            发现 {{ groupProjects.length }} 个新项目，已选择 {{ selectedGroupProjects.length }} 个
+          </el-alert>
+
+          <!-- 全选/取消全选 -->
+          <div class="mb-3">
+            <el-checkbox
+              :model-value="selectedGroupProjects.length === groupProjects.length"
+              :indeterminate="selectedGroupProjects.length > 0 && selectedGroupProjects.length < groupProjects.length"
+              @change="toggleAllGroupProjects"
+            >
+              全选/取消全选
+            </el-checkbox>
+          </div>
+
+          <!-- 项目列表 -->
+          <div class="project-list">
+            <div
+              v-for="project in groupProjects"
+              :key="project.id"
+              class="project-item"
+            >
+              <el-checkbox
+                :model-value="selectedGroupProjects.includes(project.id)"
+                @change="toggleGroupProject(project.id)"
+              >
+                <div class="project-info">
+                  <div class="project-name">{{ project.name }}</div>
+                  <div class="project-path">{{ project.path_with_namespace }}</div>
+                  <div v-if="project.description" class="project-desc">{{ project.description }}</div>
+                </div>
+              </el-checkbox>
+            </div>
+          </div>
+
+          <!-- Webhook配置 -->
+          <el-divider />
+          <div class="webhook-config">
+            <h4>Webhook 配置</h4>
+            <el-radio-group v-model="webhookConfig.useUnified">
+              <el-radio :label="true">为所有项目使用统一的 Webhook</el-radio>
+              <el-radio :label="false">为每个项目单独配置（稍后配置）</el-radio>
+            </el-radio-group>
+
+            <el-select
+              v-if="webhookConfig.useUnified"
+              v-model="webhookConfig.webhookId"
+              placeholder="请选择 Webhook"
+              class="mt-3"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="webhook in availableWebhooks"
+                :key="webhook.id"
+                :label="webhook.name"
+                :value="webhook.id"
+              >
+                <span>{{ webhook.name }}</span>
+                <span style="color: #999; margin-left: 10px">{{ formatWebhookUrl(webhook.url) }}</span>
+              </el-option>
+            </el-select>
+          </div>
+        </template>
+
+        <!-- 单项目模式：显示原有表单 -->
+        <template v-else-if="!isGroupMode && !parsingUrl">
+          <el-form-item label="项目名称" prop="name">
+            <el-input
+              v-model="currentProject.name"
+              placeholder="项目名称"
+              :disabled="autoFilled"
+            >
+              <template #prefix>
+                <el-icon><FolderOpened /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+
+          <el-form-item label="GitLab项目ID" prop="gitlab_project_id">
+            <el-input-number
+              v-model="currentProject.gitlab_project_id"
+              :min="1"
+              placeholder="GitLab项目ID"
+              :disabled="autoFilled"
+              style="width: 100%"
+            />
+          </el-form-item>
+
+          <el-form-item label="项目描述" prop="description">
+            <el-input
+              v-model="currentProject.description"
+              type="textarea"
+              :rows="3"
+              placeholder="项目描述（可选）"
+            />
+          </el-form-item>
+
+          <el-form-item label="自动管理Webhook">
+            <div style="display: flex; align-items: center; width: 100%;">
+              <el-switch v-model="currentProject.auto_manage_webhook" style="margin-right: 12px;" />
+              <span style="font-size: 13px; color: #909399; line-height: 1.2;">
+                开启后，系统会自动在GitLab上创建和管理Webhook
+              </span>
+            </div>
+          </el-form-item>
+        </template>
       </el-form>
-      
+
       <template #footer>
         <el-button @click="projectModalVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveProject" :loading="submitting">
-          {{ isEditing ? '更新' : '添加' }}
+        <el-button
+          type="primary"
+          @click="isGroupMode ? saveBatchProjects() : saveProject()"
+          :loading="submitting"
+          :disabled="parsingUrl"
+        >
+          {{ isGroupMode ? `批量导入 (${selectedGroupProjects.length})` : (isEditing ? '更新' : '添加') }}
         </el-button>
       </template>
     </el-dialog>
@@ -288,6 +378,13 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量导入对话框（已整合到主对话框中） -->
+    <!-- <BatchImport
+      v-model="batchModalVisible"
+      :projects="batchProjects"
+      @success="handleBatchImportSuccess"
+    /> -->
   </div>
 </template>
 
@@ -303,12 +400,14 @@ import {
   Link,
   Connection,
   Refresh,
-  FolderOpened
+  FolderOpened,
+  Loading
 } from '@element-plus/icons-vue'
 import { projectsApi, webhooksApi } from '@/api'
 import type { Project, Webhook } from '@/api'
 import { formatDate } from '@/utils/format'
 import { useAuthStore } from '@/stores/auth'
+// import BatchImport from './BatchImport.vue' // 不再需要，功能已整合到主对话框
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -324,6 +423,20 @@ const autoFilled = ref(false)
 const managingProject = ref<Project | null>(null)
 const selectedWebhookIds = ref<number[]>([])
 const activeGroups = ref<string[]>([])
+// 以下变量已不再需要，功能已整合到主对话框
+// const batchModalVisible = ref(false)
+// const batchProjects = ref<any[]>([])
+
+// 新增状态：URL解析和组模式
+const parsingUrl = ref(false)  // URL解析中
+const isGroupMode = ref(false)  // 是否为组模式
+const groupInfo = ref<any>(null)  // 组信息
+const groupProjects = ref<any[]>([])  // 组内项目列表
+const selectedGroupProjects = ref<number[]>([])  // 选中的组项目
+const webhookConfig = reactive({
+  useUnified: true,
+  webhookId: null as number | null
+})
 
 const hasGitLabToken = computed(() => authStore.hasGitLabToken)
 
@@ -425,7 +538,7 @@ const loadWebhooks = async () => {
   }
 }
 
-const showAddModal = () => {
+const showAddModal = async () => {
   if (!ensureGitLabToken()) {
     return
   }
@@ -439,6 +552,10 @@ const showAddModal = () => {
   })
   isEditing.value = false
   autoFilled.value = false
+  isGroupMode.value = false
+  parsingUrl.value = false
+  // 加载可用的webhooks，为批量导入做准备
+  await loadWebhooks()
   projectModalVisible.value = true
 }
 
@@ -453,16 +570,40 @@ const parseProjectUrl = async () => {
   if (!currentProject.url || isEditing.value) return
   if (!ensureGitLabToken()) return
 
+  parsingUrl.value = true
   try {
-    const res = await projectsApi.parseProjectUrl(currentProject.url)
-    if (res.data) {
+    const res: any = await projectsApi.parseProjectUrl(currentProject.url)
+
+    // 检查响应中的 is_group 标志
+    if (res.is_group) {
+      // 切换到组模式
+      isGroupMode.value = true
+      groupInfo.value = res.data.group_info
+      groupProjects.value = res.data.projects
+      selectedGroupProjects.value = res.data.projects.map((p: any) => p.id) // 默认全选
+
+      // 清空单项目表单
+      currentProject.name = ''
+      currentProject.gitlab_project_id = undefined
+      currentProject.description = ''
+      autoFilled.value = false
+
+      ElMessage.success(`检测到 GitLab 组：${groupInfo.value.name}，发现 ${groupProjects.value.length} 个新项目`)
+    } else if (res.data) {
+      // 单项目模式
+      isGroupMode.value = false
       currentProject.name = res.data.name
       currentProject.gitlab_project_id = res.data.gitlab_project_id
+      currentProject.description = res.data.description || ''
       autoFilled.value = true
       ElMessage.success('项目信息解析成功')
     }
   } catch (error) {
     autoFilled.value = false
+    isGroupMode.value = false
+    ElMessage.warning('URL解析失败，请检查URL格式或手动填写项目信息')
+  } finally {
+    parsingUrl.value = false
   }
 }
 
@@ -577,6 +718,94 @@ const goToWebhooks = () => {
   router.push('/webhooks')
 }
 
+// 不再需要这个函数，功能已整合到saveBatchProjects中
+// const handleBatchImportSuccess = () => {
+//   loadProjects()
+// }
+
+// 批量保存项目
+const saveBatchProjects = async () => {
+  if (selectedGroupProjects.value.length === 0) {
+    ElMessage.warning('请至少选择一个项目')
+    return
+  }
+
+  if (webhookConfig.useUnified && !webhookConfig.webhookId) {
+    ElMessage.warning('请选择要关联的 Webhook')
+    return
+  }
+
+  submitting.value = true
+  try {
+    const selectedProjectsData = groupProjects.value
+      .filter((p: any) => selectedGroupProjects.value.includes(p.id))
+      .map((p: any) => ({
+        gitlab_project_id: p.id,
+        name: p.name,
+        url: p.web_url,
+        description: p.description || ''
+      }))
+
+    const batchData = {
+      projects: selectedProjectsData,
+      webhook_config: {
+        use_unified: webhookConfig.useUnified,
+        unified_webhook_id: webhookConfig.webhookId
+      }
+    }
+
+    const res = await projectsApi.batchCreateProjects(batchData)
+
+    if (res.data) {
+      const { success_count, failure_count } = res.data
+      ElMessage.success(`批量导入完成：成功 ${success_count} 个，失败 ${failure_count} 个`)
+      projectModalVisible.value = false
+      await loadProjects()
+    }
+  } catch (error) {
+    // 错误已在 API 客户端处理
+  } finally {
+    submitting.value = false
+  }
+}
+
+// 切换组项目选择
+const toggleGroupProject = (projectId: number) => {
+  const index = selectedGroupProjects.value.indexOf(projectId)
+  if (index > -1) {
+    selectedGroupProjects.value.splice(index, 1)
+  } else {
+    selectedGroupProjects.value.push(projectId)
+  }
+}
+
+// 全选/取消全选组项目
+const toggleAllGroupProjects = () => {
+  if (selectedGroupProjects.value.length === groupProjects.value.length) {
+    selectedGroupProjects.value = []
+  } else {
+    selectedGroupProjects.value = groupProjects.value.map((p: any) => p.id)
+  }
+}
+
+// 处理对话框关闭
+const handleDialogClose = () => {
+  // 重置所有状态
+  isGroupMode.value = false
+  groupInfo.value = null
+  groupProjects.value = []
+  selectedGroupProjects.value = []
+  parsingUrl.value = false
+  autoFilled.value = false
+  currentProject.url = ''
+  currentProject.name = ''
+  currentProject.gitlab_project_id = undefined
+  currentProject.description = ''
+  webhookConfig.useUnified = true
+  webhookConfig.webhookId = null
+  isEditing.value = false
+}
+
 onMounted(() => {
   loadProjects()
 })
@@ -615,6 +844,75 @@ onMounted(() => {
 
 .mb-4 {
   margin-bottom: 16px;
+}
+
+.mb-3 {
+  margin-bottom: 12px;
+}
+
+.mt-3 {
+  margin-top: 12px;
+}
+
+.parsing-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: #909399;
+
+  p {
+    margin-top: 16px;
+    font-size: 14px;
+  }
+}
+
+.project-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 10px;
+
+  .project-item {
+    padding: 10px;
+    border-bottom: 1px solid #f0f0f0;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .project-info {
+      margin-left: 8px;
+
+      .project-name {
+        font-weight: 500;
+        color: #303133;
+      }
+
+      .project-path {
+        font-size: 12px;
+        color: #909399;
+        margin-top: 2px;
+      }
+
+      .project-desc {
+        font-size: 12px;
+        color: #909399;
+        margin-top: 4px;
+      }
+    }
+  }
+}
+
+.webhook-config {
+  margin-top: 20px;
+
+  h4 {
+    margin-bottom: 15px;
+    color: #303133;
+  }
 }
 
 .el-card {

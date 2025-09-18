@@ -1,17 +1,17 @@
 <template>
-  <div class="login-container">
-    <div class="login-box">
-      <div class="login-header">
-        <h1 class="login-title">GitLab Merge Alert</h1>
-        <p class="login-subtitle">登录到系统</p>
+  <div class="register-container">
+    <div class="register-box">
+      <div class="register-header">
+        <h1 class="register-title">GitLab Merge Alert</h1>
+        <p class="register-subtitle">注册普通用户账户</p>
       </div>
-      
-      <form @submit.prevent="handleLogin" class="login-form">
+
+      <form @submit.prevent="handleRegister" class="register-form">
         <div class="form-group">
           <label for="username" class="form-label">用户名</label>
           <input
             id="username"
-            v-model="loginForm.username"
+            v-model="registerForm.username"
             type="text"
             class="form-control"
             placeholder="请输入用户名"
@@ -19,48 +19,69 @@
             :disabled="loading"
           />
         </div>
-        
+
         <div class="form-group">
-          <label for="password" class="form-label">密码</label>
+          <label for="email" class="form-label">邮箱</label>
           <input
-            id="password"
-            v-model="loginForm.password"
-            type="password"
+            id="email"
+            v-model="registerForm.email"
+            type="email"
             class="form-control"
-            placeholder="请输入密码"
+            placeholder="请输入邮箱"
             required
             :disabled="loading"
           />
         </div>
-        
+
         <div class="form-group">
-          <label class="form-check">
-            <input
-              v-model="loginForm.remember"
-              type="checkbox"
-              class="form-check-input"
-            />
-            <span class="form-check-label">记住我</span>
-          </label>
+          <label for="password" class="form-label">密码</label>
+          <input
+            id="password"
+            v-model="registerForm.password"
+            type="password"
+            class="form-control"
+            placeholder="请输入密码"
+            required
+            minlength="6"
+            :disabled="loading"
+          />
         </div>
-        
+
+        <div class="form-group">
+          <label for="confirmPassword" class="form-label">确认密码</label>
+          <input
+            id="confirmPassword"
+            v-model="registerForm.confirmPassword"
+            type="password"
+            class="form-control"
+            placeholder="请再次输入密码"
+            required
+            minlength="6"
+            :disabled="loading"
+          />
+        </div>
+
         <button
           type="submit"
           class="btn btn-primary btn-block"
           :disabled="loading"
         >
           <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
-          {{ loading ? '登录中...' : '登录' }}
+          {{ loading ? '注册中...' : '注册' }}
         </button>
       </form>
-      
+
       <div v-if="error" class="alert alert-danger mt-3">
         {{ error }}
       </div>
 
-      <div class="login-footer">
-        还没有账户？
-        <RouterLink to="/register">立即注册</RouterLink>
+      <p class="register-note">
+        系统仅允许默认 admin 账号拥有管理员权限，注册后将创建普通用户。
+      </p>
+
+      <div class="register-footer">
+        已有账户？
+        <RouterLink to="/login">立即登录</RouterLink>
       </div>
     </div>
   </div>
@@ -74,27 +95,36 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const loginForm = ref({
+const registerForm = ref({
   username: '',
+  email: '',
   password: '',
-  remember: false
+  confirmPassword: ''
 })
 
 const loading = ref(false)
 const error = ref('')
 
-const handleLogin = async () => {
+const handleRegister = async () => {
+  if (registerForm.value.password !== registerForm.value.confirmPassword) {
+    error.value = '两次输入的密码不一致'
+    return
+  }
+
   loading.value = true
   error.value = ''
-  
+
   try {
-    await authStore.login(loginForm.value.username, loginForm.value.password)
-    
-    // 获取重定向URL或默认跳转到首页
-    const redirect = router.currentRoute.value.query.redirect as string || '/'
+    await authStore.register({
+      username: registerForm.value.username.trim(),
+      email: registerForm.value.email.trim(),
+      password: registerForm.value.password
+    })
+
+    const redirect = (router.currentRoute.value.query.redirect as string) || '/'
     router.push(redirect)
   } catch (err: any) {
-    error.value = err.response?.data?.error || '登录失败，请重试'
+    error.value = err.response?.data?.error || '注册失败，请重试'
   } finally {
     loading.value = false
   }
@@ -102,7 +132,7 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
-.login-container {
+.register-container {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -110,33 +140,33 @@ const handleLogin = async () => {
   background-color: #f5f5f5;
 }
 
-.login-box {
+.register-box {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   padding: 2rem;
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-.login-header {
+.register-header {
   text-align: center;
   margin-bottom: 2rem;
 }
 
-.login-title {
+.register-title {
   font-size: 1.75rem;
   font-weight: 600;
   color: #333;
   margin-bottom: 0.5rem;
 }
 
-.login-subtitle {
+.register-subtitle {
   color: #666;
   font-size: 0.95rem;
 }
 
-.login-form {
+.register-form {
   margin-top: 1.5rem;
 }
 
@@ -177,22 +207,6 @@ const handleLogin = async () => {
   opacity: 1;
 }
 
-.form-check {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.form-check-input {
-  margin-right: 0.5rem;
-  cursor: pointer;
-}
-
-.form-check-label {
-  color: #666;
-  user-select: none;
-}
-
 .btn {
   display: inline-block;
   font-weight: 400;
@@ -204,90 +218,34 @@ const handleLogin = async () => {
   font-size: 1rem;
   line-height: 1.5;
   border-radius: 0.25rem;
-  transition: all 0.15s ease-in-out;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-.btn-primary {
-  color: #fff;
-  background-color: #007bff;
-  border-color: #007bff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #0069d9;
-  border-color: #0062cc;
-}
-
-.btn-primary:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
+  width: 100%;
 }
 
 .btn-block {
-  display: block;
   width: 100%;
-  margin-top: 1.5rem;
 }
 
-.login-footer {
+.register-footer {
   margin-top: 1.5rem;
   text-align: center;
   color: #666;
 }
 
-.login-footer a {
+.register-note {
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+  color: #888;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.register-footer a {
   color: #0d6efd;
   text-decoration: none;
   margin-left: 0.25rem;
 }
 
-.login-footer a:hover {
+.register-footer a:hover {
   text-decoration: underline;
-}
-
-.spinner-border {
-  display: inline-block;
-  width: 1rem;
-  height: 1rem;
-  vertical-align: text-bottom;
-  border: 0.15em solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spinner-border 0.75s linear infinite;
-}
-
-.spinner-border-sm {
-  width: 0.875rem;
-  height: 0.875rem;
-  border-width: 0.125em;
-}
-
-.me-2 {
-  margin-right: 0.5rem;
-}
-
-@keyframes spinner-border {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.alert {
-  position: relative;
-  padding: 0.75rem 1.25rem;
-  border: 1px solid transparent;
-  border-radius: 0.25rem;
-}
-
-.alert-danger {
-  color: #721c24;
-  background-color: #f8d7da;
-  border-color: #f5c6cb;
-}
-
-.mt-3 {
-  margin-top: 1rem;
 }
 </style>

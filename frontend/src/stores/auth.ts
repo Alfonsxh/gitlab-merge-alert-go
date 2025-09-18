@@ -31,6 +31,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const register = async (payload: { username: string; email: string; password: string }) => {
+    try {
+      const response = await authAPI.register(payload)
+      setAuthData(response)
+      await fetchProfile()
+      if (user.value?.avatar) {
+        setFaviconFromAvatar(user.value.avatar)
+      }
+    } catch (error) {
+      clearAuthData()
+      throw error
+    }
+  }
+
   const logout = async () => {
     try {
       await authAPI.logout()
@@ -95,9 +109,10 @@ export const useAuthStore = defineStore('auth', () => {
   const setAuthData = (data: LoginResponse) => {
     token.value = data.token
     refreshToken.value = null // 后端暂不支持 refresh token
-    
+    user.value = data.user
+
     localStorage.setItem('token', data.token)
-    
+
     updateLastActivity()
   }
 
@@ -149,6 +164,7 @@ export const useAuthStore = defineStore('auth', () => {
     
     // Actions
     login,
+    register,
     logout,
     fetchProfile,
     refreshAccessToken,

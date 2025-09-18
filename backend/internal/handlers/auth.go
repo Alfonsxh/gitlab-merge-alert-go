@@ -10,6 +10,35 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Register 注册新的普通用户账户
+func (h *Handler) Register(c *gin.Context) {
+	var req models.RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		return
+	}
+
+	resp, err := h.authService.RegisterUser(req.Username, req.Email, req.Password)
+	if err != nil {
+		switch err {
+		case services.ErrUsernameExists:
+			c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+			return
+		case services.ErrEmailExists:
+			c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+			return
+		case services.ErrAdminLocked:
+			c.JSON(http.StatusForbidden, gin.H{"error": "Admin account is reserved"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register account"})
+			return
+		}
+	}
+
+	h.response.Success(c, resp)
+}
+
 // Login 用户登录
 func (h *Handler) Login(c *gin.Context) {
 	var req models.LoginRequest

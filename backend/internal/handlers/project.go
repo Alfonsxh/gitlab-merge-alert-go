@@ -422,14 +422,83 @@ func (h *Handler) ParseProjectURL(c *gin.Context) {
 		return
 	}
 
+	// 解析URL
+	parsed := h.gitlabService.ParseGitLabURL(req.URL)
+	if !parsed.IsValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "URL解析失败: " + parsed.Error})
+		return
+	}
+
 	// 使用GitLab服务解析URL并获取项目信息
 	projectInfo, err := h.gitlabService.GetProjectByURL(req.URL, token)
 	if err != nil {
+		// 检查是否是组URL
+		if err.Error() == "GROUP_URL" {
+			// 尝试作为组处理
+			groupInfo, groupErr := h.gitlabService.GetGroupByPath(parsed.BaseURL, parsed.ProjectPath, token)
+			if groupErr != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "无法识别为项目或组: " + groupErr.Error()})
+				return
+			}
+
+			// 获取组下所有项目
+			projects, projectsErr := h.gitlabService.GetGroupProjects(parsed.BaseURL, parsed.ProjectPath, token)
+			if projectsErr != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "获取组项目失败: " + projectsErr.Error()})
+				return
+			}
+
+			// 获取已存在的项目ID列表
+			var existingProjectIDs []int
+			if err := h.db.Model(&models.Project{}).Pluck("gitlab_project_id", &existingProjectIDs).Error; err != nil {
+				logger.GetLogger().Errorf("Failed to get existing project IDs: %v", err)
+			}
+
+			// 创建一个map用于快速查找
+			existingMap := make(map[int]bool)
+			for _, id := range existingProjectIDs {
+				existingMap[id] = true
+			}
+
+			// 转换为 ScanGroupProjectsResponse 格式，过滤已存在的项目
+			var projectInfos []*models.GitLabProjectInfo
+			for _, project := range projects {
+				// 如果项目已存在，直接跳过
+				if existingMap[project.ID] {
+					continue
+				}
+
+				projectInfo := &models.GitLabProjectInfo{
+					ID:                project.ID,
+					Name:              project.Name,
+					PathWithNamespace: project.PathWithNamespace,
+					WebURL:            project.WebURL,
+					Description:       project.Description,
+					DefaultBranch:     project.DefaultBranch,
+					Visibility:        project.Visibility,
+					Selected:          true, // 默认全选
+				}
+
+				projectInfos = append(projectInfos, projectInfo)
+			}
+
+			// 返回扫描组的响应格式，前端可以识别并处理
+			response := models.ScanGroupProjectsResponse{
+				GroupInfo: (*models.GitLabGroupInfo)(groupInfo),
+				Projects:  projectInfos,
+			}
+
+			// 使用特殊的响应格式，让前端知道这是一个组
+			c.JSON(http.StatusOK, gin.H{"data": response, "is_group": true})
+			return
+		}
+
+		// 其他错误
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 转换为响应格式
+	// 转换为响应格式（单个项目）
 	response := models.ParseProjectURLResponse{
 		GitLabProjectID:   projectInfo.ID,
 		Name:              projectInfo.Name,
@@ -440,7 +509,7 @@ func (h *Handler) ParseProjectURL(c *gin.Context) {
 		Visibility:        projectInfo.Visibility,
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": response})
+	c.JSON(http.StatusOK, gin.H{"data": response, "is_group": false})
 }
 
 // TestGitLabConnection 测试GitLab连接

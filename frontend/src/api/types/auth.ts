@@ -9,6 +9,12 @@ export interface LoginResponse {
   user: AccountResponse
 }
 
+export interface RegisterRequest {
+  username: string
+  password: string
+  email: string
+}
+
 export interface ChangePasswordRequest {
   old_password: string
   new_password: string

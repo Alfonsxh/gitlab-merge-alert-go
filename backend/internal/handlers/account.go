@@ -88,6 +88,16 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 		req.Role = models.RoleUser
 	}
 
+	if strings.EqualFold(req.Username, "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot register reserved admin username"})
+		return
+	}
+
+	if req.Role == models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot create additional admin accounts"})
+		return
+	}
+
 	// 检查用户名是否已存在
 	var count int64
 	if err := h.db.Model(&models.Account{}).Where("username = ?", req.Username).Count(&count).Error; err != nil {
@@ -187,6 +197,10 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 	}
 
 	if req.Role != "" && req.Role != account.Role {
+		if req.Role == models.RoleAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Cannot assign admin role"})
+			return
+		}
 		// 不能移除最后一个管理员
 		if account.Role == models.RoleAdmin && req.Role != models.RoleAdmin {
 			var adminCount int64

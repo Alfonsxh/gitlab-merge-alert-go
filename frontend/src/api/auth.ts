@@ -1,7 +1,19 @@
 import { apiClient } from './client'
-import type { LoginRequest, LoginResponse, ChangePasswordRequest, AccountResponse } from './types/auth'
+import type {
+  LoginRequest,
+  LoginResponse,
+  ChangePasswordRequest,
+  AccountResponse,
+  RegisterRequest
+} from './types/auth'
 
 export const authAPI = {
+  // 用户注册
+  register: async (data: RegisterRequest): Promise<LoginResponse> => {
+    const response = await apiClient.post<LoginResponse>('/auth/register', data)
+    return response.data
+  },
+
   // 登录
   login: async (data: LoginRequest): Promise<LoginResponse> => {
     const response = await apiClient.post<any>('/auth/login', data)

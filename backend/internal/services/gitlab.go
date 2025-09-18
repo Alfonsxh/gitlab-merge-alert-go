@@ -189,8 +189,20 @@ func (s *gitLabService) GetProjectByURL(projectURL, accessToken string) (*GitLab
 		return nil, fmt.Errorf("URL解析失败: %s", parsed.Error)
 	}
 
-	// 使用解析出的信息获取项目
-	return s.GetProjectByPath(parsed.BaseURL, parsed.ProjectPath, accessToken)
+	// 首先尝试作为项目获取
+	projectInfo, err := s.GetProjectByPath(parsed.BaseURL, parsed.ProjectPath, accessToken)
+	if err == nil {
+		return projectInfo, nil
+	}
+
+	// 如果失败了，检查是否因为这是一个组URL
+	if strings.Contains(err.Error(), "项目不存在") || strings.Contains(err.Error(), "404") {
+		// 返回特殊错误标识这是组URL
+		return nil, fmt.Errorf("GROUP_URL")
+	}
+
+	// 其他错误直接返回
+	return nil, err
 }
 
 // GetProjectByPath 通过路径获取项目信息

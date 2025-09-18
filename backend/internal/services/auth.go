@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"gitlab-merge-alert-go/internal/models"
@@ -15,6 +16,9 @@ var (
 	ErrInvalidCredentials = errors.New("invalid username or password")
 	ErrAccountNotActive   = errors.New("account is not active")
 	ErrAccountNotFound    = errors.New("account not found")
+	ErrUsernameExists     = errors.New("username already exists")
+	ErrEmailExists        = errors.New("email already exists")
+	ErrAdminLocked        = errors.New("admin account is reserved")
 )
 
 type AuthService interface {
@@ -22,6 +26,7 @@ type AuthService interface {
 	RefreshToken(oldToken string) (*models.LoginResponse, error)
 	GetAccountByID(id uint) (*models.Account, error)
 	ChangePassword(accountID uint, oldPassword, newPassword string) error
+	RegisterUser(username, email, password string) (*models.LoginResponse, error)
 	InitializeAdminAccount() error
 }
 
@@ -143,6 +148,57 @@ func (s *authService) ChangePassword(accountID uint, oldPassword, newPassword st
 	// 更新密码
 	account.PasswordHash = newHash
 	return s.db.Save(account).Error
+}
+
+func (s *authService) RegisterUser(username, email, password string) (*models.LoginResponse, error) {
+	username = strings.TrimSpace(username)
+	email = strings.TrimSpace(email)
+	if strings.EqualFold(username, "admin") {
+		return nil, ErrAdminLocked
+	}
+
+	var count int64
+	if err := s.db.Model(&models.Account{}).Where("username = ?", username).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		return nil, ErrUsernameExists
+	}
+
+	if err := s.db.Model(&models.Account{}).Where("email = ?", email).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		return nil, ErrEmailExists
+	}
+
+	passwordHash, err := s.passwordManager.HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	account := &models.Account{
+		Username:     username,
+		PasswordHash: passwordHash,
+		Email:        email,
+		Role:         models.RoleUser,
+		IsActive:     true,
+	}
+
+	if err := s.db.Create(account).Error; err != nil {
+		return nil, err
+	}
+
+	token, expiresAt, err := s.jwtManager.Generate(account.ID, account.Username, account.Role)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.LoginResponse{
+		Token:     token,
+		ExpiresAt: expiresAt,
+		User:      account.ToResponse(),
+	}, nil
 }
 
 func (s *authService) InitializeAdminAccount() error {

@@ -12,6 +12,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录', requiresAuth: false }
   },
   {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/auth/Register.vue'),
+    meta: { title: '注册', requiresAuth: false }
+  },
+  {
     path: '/',
     component: MainLayout,
     meta: { requiresAuth: true },
@@ -128,7 +134,7 @@ router.beforeEach(async (to, _from, next) => {
   }
   
   // 已登录用户访问登录页，重定向到首页
-  if (to.path === '/login' && authStore.isAuthenticated) {
+  if (['/login', '/register'].includes(to.path) && authStore.isAuthenticated) {
     return next('/')
   }
   

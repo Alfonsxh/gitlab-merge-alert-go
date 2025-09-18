@@ -81,6 +81,7 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 		// 认证相关
 		auth := api.Group("/auth")
 		{
+			auth.POST("/register", h.Register)
 			auth.POST("/login", h.Login)
 			auth.POST("/logout", h.Logout)
 			auth.POST("/refresh", h.RefreshToken)
