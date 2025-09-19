@@ -92,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { projectsApi, webhooksApi } from '@/api'
 
@@ -109,8 +109,10 @@ const selectedProjects = ref<number[]>([])
 const availableWebhooks = ref<any[]>([])
 const submitting = ref(false)
 const dialogBodyStyle = {
-  padding: '0 24px 24px',
-  overflow: 'hidden'
+  padding: '0 24px 20px',
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column'
 }
 
 const dialogWidth = 'clamp(340px, 80vw, 900px)'
@@ -134,6 +136,14 @@ watch(() => props.modelValue, (val) => {
 
 watch(visible, (val) => {
   emit('update:modelValue', val)
+
+  if (typeof window !== 'undefined') {
+    document.body.classList.toggle('modal-scroll-lock', val)
+  }
+})
+
+onUnmounted(() => {
+  document.body.classList.remove('modal-scroll-lock')
 })
 
 const loadWebhooks = async () => {
@@ -222,33 +232,37 @@ const handleClose = () => {
   :deep(.el-dialog) {
     width: 100%;
     max-width: 900px;
-    max-height: calc(100vh - 48px);
+    max-height: calc(100vh - 60px);
     display: flex;
     flex-direction: column;
-    margin: 24px auto !important;
+    margin: 30px auto !important;
+    overflow: hidden;
   }
 
   :deep(.el-dialog__header) {
     padding: 20px 24px 12px;
+    flex-shrink: 0;
   }
 
   :deep(.el-dialog__body) {
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
   }
 
   :deep(.el-dialog__footer) {
     padding: 16px 24px 24px;
+    flex-shrink: 0;
   }
 }
 
 .dialog-content {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .project-section {
@@ -256,11 +270,13 @@ const handleClose = () => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .webhook-section {
   flex-shrink: 0;
   padding-bottom: 8px;
+  margin-top: auto;
 }
 
 .selection-bar {
@@ -270,15 +286,17 @@ const handleClose = () => {
 }
 
 .project-list {
-.project-list {
   flex: 1 1 auto;
-  max-height: calc(70vh - 230px);
+  height: calc(60vh - 200px);
+  min-height: 200px;
+  max-height: 400px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
   border: 1px solid #ebeef5;
   border-radius: 8px;
   background-color: #fafafa;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 
   .project-item {
     padding: 10px 12px;
@@ -347,7 +365,7 @@ const handleClose = () => {
 }
 
 .section-divider {
-  margin: 16px 0 12px;
+  margin: 12px 0 8px;
 }
 
 .mb-3 {
@@ -362,3 +380,6 @@ const handleClose = () => {
   margin-top: 12px;
 }
 </style>
+:global(body.modal-scroll-lock) {
+  overflow: hidden;
+}

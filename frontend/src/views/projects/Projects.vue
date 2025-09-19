@@ -2,10 +2,20 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">项目管理</h2>
-      <el-button type="primary" @click="showAddModal">
-        <el-icon><Plus /></el-icon>
-        添加项目
-      </el-button>
+      <el-space>
+        <el-button
+          v-if="projects.length > 0"
+          @click="batchCheckWebhookStatus"
+          :loading="batchChecking"
+        >
+          <el-icon><Refresh /></el-icon>
+          批量刷新Webhook状态
+        </el-button>
+        <el-button type="primary" @click="showAddModal">
+          <el-icon><Plus /></el-icon>
+          添加项目
+        </el-button>
+      </el-space>
     </div>
 
     <el-alert
@@ -80,7 +90,6 @@
                       {{ row.webhook_synced ? '已同步' : '未同步' }}
                     </el-tag>
                     <el-button
-                      v-if="row.auto_manage_webhook"
                       size="small"
                       link
                       type="primary"
@@ -146,40 +155,57 @@
       </div>
     </el-card>
     
-    <!-- 添加/编辑项目对话框（支持单项目和批量导入） -->
+    <!-- 添加项目对话框（支持单项目和批量导入） -->
     <el-dialog
       v-model="projectModalVisible"
-      :title="isGroupMode ? `批量导入 - ${groupInfo?.name || ''}` : (isEditing ? '编辑项目' : '添加项目')"
-      :width="isGroupMode ? '80%' : '650px'"
-      :close-on-click-modal="false"
+      :title="isGroupMode ? `批量导入 - ${groupInfo?.name || ''}` : '添加项目'"
+      :width="isGroupMode ? '900px' : '750px'"
+      :close-on-click-modal="true"
+      :close-on-press-escape="true"
+      :append-to-body="true"
+      class="add-project-dialog"
       @closed="handleDialogClose"
     >
       <el-form
         ref="projectFormRef"
         :model="currentProject"
-        :rules="projectRules"
-        label-width="140px"
+        label-width="80px"
+        :hide-required-asterisk="true"
       >
-        <!-- URL输入区域（两种模式共用，编辑时不显示） -->
-        <el-form-item label="项目URL" prop="url" v-if="!isEditing">
-          <el-input
-            v-model="currentProject.url"
-            placeholder="输入项目或组的GitLab URL"
-            :disabled="parsingUrl"
-            @blur="parseProjectUrl"
-          >
-            <template #prefix>
-              <el-icon><Link /></el-icon>
-            </template>
-            <template #suffix v-if="parsingUrl">
-              <el-icon class="is-loading"><Loading /></el-icon>
-            </template>
-          </el-input>
+        <!-- URL输入区域 -->
+        <el-form-item label="项目URL" v-if="!isEditing">
+          <div class="url-input-container">
+            <el-input
+              v-model="currentProject.url"
+              placeholder="输入项目或组的GitLab URL"
+              :disabled="parsingUrl || urlParsed"
+              class="url-input"
+            >
+              <template #prefix>
+                <el-icon><Link /></el-icon>
+              </template>
+            </el-input>
+            <el-button
+              type="primary"
+              @click="parseProjectUrl"
+              :loading="parsingUrl"
+              :disabled="!currentProject.url || urlParsed"
+              class="parse-button"
+            >
+              {{ urlParsed ? '重新解析' : '解析' }}
+            </el-button>
+          </div>
           <div class="form-item-help">
-            <span v-if="!parsingUrl">支持项目URL或组URL</span>
-            <span v-else style="color: #409eff">
+            <span v-if="!parsingUrl && !urlParsed">支持项目URL或组URL</span>
+            <span v-else-if="parsingUrl" style="color: #409eff">
               <el-icon class="is-loading" style="margin-right: 4px; vertical-align: middle;"><Loading /></el-icon>
               正在检测URL类型...
+            </span>
+            <span v-else-if="urlParsed && isGroupMode" style="color: #67c23a">
+              检测到GitLab组，发现 {{ groupProjects.length }} 个项目
+            </span>
+            <span v-else-if="urlParsed && !isGroupMode" style="color: #67c23a">
+              项目信息已解析
             </span>
           </div>
         </el-form-item>
@@ -256,60 +282,58 @@
           </div>
         </template>
 
-        <!-- 单项目模式：显示原有表单 -->
-        <template v-else-if="!isGroupMode && !parsingUrl">
-          <el-form-item label="项目名称" prop="name">
-            <el-input
-              v-model="currentProject.name"
-              placeholder="项目名称"
-              :disabled="autoFilled"
-            >
-              <template #prefix>
-                <el-icon><FolderOpened /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-
-          <el-form-item label="GitLab项目ID" prop="gitlab_project_id">
-            <el-input-number
-              v-model="currentProject.gitlab_project_id"
-              :min="1"
-              placeholder="GitLab项目ID"
-              :disabled="autoFilled"
-              style="width: 100%"
-            />
-          </el-form-item>
-
-          <el-form-item label="项目描述" prop="description">
-            <el-input
-              v-model="currentProject.description"
-              type="textarea"
-              :rows="3"
-              placeholder="项目描述（可选）"
-            />
-          </el-form-item>
-
-          <el-form-item label="自动管理Webhook">
-            <div style="display: flex; align-items: center; width: 100%;">
-              <el-switch v-model="currentProject.auto_manage_webhook" style="margin-right: 12px;" />
-              <span style="font-size: 13px; color: #909399; line-height: 1.2;">
-                开启后，系统会自动在GitLab上创建和管理Webhook
-              </span>
+        <!-- 单项目模式：显示项目信息和Webhook选择 -->
+        <template v-else-if="!isGroupMode && !parsingUrl && urlParsed">
+          <div class="project-info-box">
+            <div class="project-info-item">
+              <span class="info-label">项目名称:</span>
+              <span class="info-value">{{ currentProject.name }}</span>
             </div>
-          </el-form-item>
+            <div class="project-info-item">
+              <span class="info-label">GitLab项目ID:</span>
+              <span class="info-value">{{ currentProject.gitlab_project_id }}</span>
+            </div>
+            <div class="project-info-item" v-if="currentProject.description">
+              <span class="info-label">描述:</span>
+              <span class="info-value">{{ currentProject.description }}</span>
+            </div>
+          </div>
+
+          <!-- Webhook配置 -->
+          <el-divider />
+          <div class="webhook-config">
+            <h4>Webhook 配置</h4>
+            <el-select
+              v-model="singleProjectWebhookId"
+              placeholder="请选择要关联的企业微信机器人"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="webhook in availableWebhooks"
+                :key="webhook.id"
+                :label="webhook.name"
+                :value="webhook.id"
+              >
+                <span>{{ webhook.name }}</span>
+                <span style="color: #999; margin-left: 10px">{{ formatWebhookUrl(webhook.url) }}</span>
+              </el-option>
+            </el-select>
+          </div>
         </template>
       </el-form>
 
-      <template #footer>
-        <el-button @click="projectModalVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          @click="isGroupMode ? saveBatchProjects() : saveProject()"
-          :loading="submitting"
-          :disabled="parsingUrl"
-        >
-          {{ isGroupMode ? `批量导入 (${selectedGroupProjects.length})` : (isEditing ? '更新' : '添加') }}
-        </el-button>
+      <template #footer v-if="urlParsed">
+        <div style="text-align: center;">
+          <el-button
+            type="primary"
+            @click="isGroupMode ? saveBatchProjects() : saveProject()"
+            :loading="submitting"
+            :disabled="parsingUrl"
+            size="large"
+          >
+            {{ isGroupMode ? `批量导入 (${selectedGroupProjects.length})` : '添加项目' }}
+          </el-button>
+        </div>
       </template>
     </el-dialog>
     
@@ -415,6 +439,7 @@ const projects = ref<Project[]>([])
 const availableWebhooks = ref<Webhook[]>([])
 const loading = ref(false)
 const syncingWebhook = ref<number | null>(null)
+const batchChecking = ref(false)
 const projectModalVisible = ref(false)
 const webhookModalVisible = ref(false)
 const submitting = ref(false)
@@ -431,6 +456,7 @@ const activeGroups = ref<string[]>([])
 const parsingUrl = ref(false)  // URL解析中
 const isGroupMode = ref(false)  // 是否为组模式
 const groupInfo = ref<any>(null)  // 组信息
+const urlParsed = ref(false)  // URL已解析标志
 const groupProjects = ref<any[]>([])  // 组内项目列表
 const selectedGroupProjects = ref<number[]>([])  // 选中的组项目
 const webhookConfig = reactive({
@@ -453,27 +479,16 @@ const goToProfile = () => {
 }
 
 const projectFormRef = ref<FormInstance>()
+const singleProjectWebhookId = ref<number | null>(null)  // 单项目模式的Webhook选择
 
 const currentProject = reactive<Partial<Project>>({
   name: '',
   url: '',
   gitlab_project_id: undefined,
-  description: '',
-  auto_manage_webhook: true
+  description: ''
 })
 
-const projectRules = {
-  url: [
-    { required: true, message: '请输入项目URL', trigger: 'blur' },
-    { pattern: /^https?:\/\/.+/, message: '请输入有效的URL', trigger: 'blur' }
-  ],
-  name: [
-    { required: true, message: '请输入项目名称', trigger: 'blur' }
-  ],
-  gitlab_project_id: [
-    { required: true, message: '请输入GitLab项目ID', trigger: 'blur' }
-  ]
-}
+// 不再需要表单验证规则，通过解析按钮来验证URL
 
 const groupedProjects = computed(() => {
   const groups: Record<string, Project[]> = {}
@@ -547,8 +562,7 @@ const showAddModal = async () => {
     name: '',
     url: '',
     gitlab_project_id: undefined,
-    description: '',
-    auto_manage_webhook: true
+    description: ''
   })
   isEditing.value = false
   autoFilled.value = false
@@ -569,6 +583,18 @@ const editProject = (project: Project) => {
 const parseProjectUrl = async () => {
   if (!currentProject.url || isEditing.value) return
   if (!ensureGitLabToken()) return
+
+  // 如果已经解析过，先重置
+  if (urlParsed.value) {
+    urlParsed.value = false
+    isGroupMode.value = false
+    currentProject.name = ''
+    currentProject.gitlab_project_id = undefined
+    currentProject.description = ''
+    autoFilled.value = false
+    groupProjects.value = []
+    selectedGroupProjects.value = []
+  }
 
   parsingUrl.value = true
   try {
@@ -598,9 +624,11 @@ const parseProjectUrl = async () => {
       autoFilled.value = true
       ElMessage.success('项目信息解析成功')
     }
+    urlParsed.value = true
   } catch (error) {
     autoFilled.value = false
     isGroupMode.value = false
+    urlParsed.value = false
     ElMessage.warning('URL解析失败，请检查URL格式或手动填写项目信息')
   } finally {
     parsingUrl.value = false
@@ -608,18 +636,21 @@ const parseProjectUrl = async () => {
 }
 
 const saveProject = async () => {
-  const valid = await projectFormRef.value?.validate().catch(() => false)
-  if (!valid) return
   if (!ensureGitLabToken()) return
-  
+
   submitting.value = true
   try {
     if (isEditing.value && currentProject.id) {
       await projectsApi.updateProject(currentProject.id, currentProject)
     } else {
-      await projectsApi.createProject(currentProject)
+      // 创建项目，包含webhook_id（如果选择了）
+      const projectData = {
+        ...currentProject,
+        webhook_id: singleProjectWebhookId.value || undefined
+      }
+      await projectsApi.createProject(projectData)
     }
-    
+
     ElMessage.success(isEditing.value ? '更新成功' : '添加成功')
     projectModalVisible.value = false
     await loadProjects()
@@ -687,6 +718,40 @@ const syncGitLabWebhook = async (project: Project) => {
     // 错误已在 API 客户端处理
   } finally {
     syncingWebhook.value = null
+  }
+}
+
+const batchCheckWebhookStatus = async () => {
+  if (!ensureGitLabToken()) return
+
+  batchChecking.value = true
+  try {
+    const { data } = await projectsApi.batchCheckWebhookStatus()
+
+    // 更新本地项目列表的状态
+    if (data.data && Array.isArray(data.data)) {
+      data.data.forEach((result: any) => {
+        const project = projects.value.find(p => p.id === result.project_id)
+        if (project) {
+          project.webhook_synced = result.webhook_synced
+        }
+      })
+    }
+
+    // 显示汇总信息
+    const summary = data.summary
+    if (summary) {
+      ElMessage.success(
+        `检查完成: ${summary.total} 个项目, ${summary.success} 个成功, ${summary.errors} 个失败, ${summary.status_changed} 个状态已更新`
+      )
+    } else {
+      ElMessage.success('批量状态检查完成')
+    }
+  } catch (error: any) {
+    console.error('批量检查失败:', error)
+    ElMessage.error(error.response?.data?.error || '批量检查失败')
+  } finally {
+    batchChecking.value = false
   }
 }
 
@@ -797,12 +862,14 @@ const handleDialogClose = () => {
   selectedGroupProjects.value = []
   parsingUrl.value = false
   autoFilled.value = false
+  urlParsed.value = false
   currentProject.url = ''
   currentProject.name = ''
   currentProject.gitlab_project_id = undefined
   currentProject.description = ''
   webhookConfig.useUnified = true
   webhookConfig.webhookId = null
+  singleProjectWebhookId.value = null
   isEditing.value = false
 }
 
@@ -869,7 +936,8 @@ onMounted(() => {
 }
 
 .project-list {
-  max-height: 400px;
+  max-height: 300px;
+  min-height: 150px;
   overflow-y: auto;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
@@ -1039,6 +1107,124 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
+}
+
+// 添加项目对话框样式
+.add-project-dialog {
+  // 覆盖对话框 wrapper 样式，确保相对视口定位
+  :deep(.el-overlay) {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: auto;
+  }
+
+  :deep(.el-overlay-dialog) {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 8vh;
+    padding-bottom: 8vh;
+    overflow: auto;
+  }
+
+  :deep(.el-dialog) {
+    margin: 0 auto !important;
+    max-height: 84vh;
+    display: flex;
+    flex-direction: column;
+    position: relative !important;
+  }
+
+  :deep(.el-dialog__body) {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: calc(84vh - 160px); // 减去header和footer的高度
+    padding: 20px 24px;
+
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f5f7fa;
+      border-radius: 4px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #dcdfe6;
+      border-radius: 4px;
+
+      &:hover {
+        background: #c0c4cc;
+      }
+    }
+  }
+
+  :deep(.el-dialog__header) {
+    flex-shrink: 0;
+    padding: 20px 24px;
+    border-bottom: 1px solid #ebeef5;
+  }
+
+  :deep(.el-dialog__footer) {
+    flex-shrink: 0;
+    padding: 16px 24px;
+    border-top: 1px solid #ebeef5;
+  }
+}
+
+// URL输入容器样式
+.url-input-container {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+
+  .url-input {
+    flex: 1;
+  }
+
+  .parse-button {
+    flex-shrink: 0;
+  }
+}
+
+// 项目信息展示框样式
+.project-info-box {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
+
+  .project-info-item {
+    display: flex;
+    margin-bottom: 12px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .info-label {
+      font-weight: 500;
+      color: #606266;
+      width: 120px;
+      flex-shrink: 0;
+    }
+
+    .info-value {
+      color: #303133;
+      flex: 1;
+      word-break: break-word;
+    }
+  }
 }
 
 :deep(.el-dialog) {

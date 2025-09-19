@@ -13,10 +13,9 @@ type Project struct {
 	AccessToken     string `json:"-" gorm:"column:access_token"` // 不在JSON中显示敏感信息
 
 	// GitLab Webhook相关字段
-	GitLabWebhookID   *int       `json:"gitlab_webhook_id,omitempty" gorm:"column:gitlab_webhook_id;index"`  // GitLab中webhook的ID
-	WebhookSynced     bool       `json:"webhook_synced" gorm:"column:webhook_synced;default:false"`          // webhook同步状态
-	AutoManageWebhook bool       `json:"auto_manage_webhook" gorm:"column:auto_manage_webhook;default:true"` // 是否自动管理webhook
-	LastSyncAt        *time.Time `json:"last_sync_at,omitempty" gorm:"column:last_sync_at"`                  // 最后同步时间
+	GitLabWebhookID *int       `json:"gitlab_webhook_id,omitempty" gorm:"column:gitlab_webhook_id;index"` // GitLab中webhook的ID
+	WebhookSynced   bool       `json:"webhook_synced" gorm:"column:webhook_synced;default:false"`         // webhook同步状态
+	LastSyncAt      *time.Time `json:"last_sync_at,omitempty" gorm:"column:last_sync_at"`                 // 最后同步时间
 
 	CreatedBy *uint     `json:"created_by,omitempty" gorm:"column:created_by;index"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
@@ -27,37 +26,34 @@ type Project struct {
 }
 
 type CreateProjectRequest struct {
-	GitLabProjectID   int    `json:"gitlab_project_id" binding:"required"`
-	Name              string `json:"name" binding:"required"`
-	URL               string `json:"url" binding:"required,url"`
-	Description       string `json:"description"`
-	AccessToken       string `json:"access_token"`
-	AutoManageWebhook *bool  `json:"auto_manage_webhook,omitempty"` // 可选，默认为true
-	WebhookID         *uint  `json:"webhook_id,omitempty"`          // 可选，用于关联的webhook
+	GitLabProjectID int    `json:"gitlab_project_id" binding:"required"`
+	Name            string `json:"name" binding:"required"`
+	URL             string `json:"url" binding:"required,url"`
+	Description     string `json:"description"`
+	AccessToken     string `json:"access_token"`
+	WebhookID       *uint  `json:"webhook_id,omitempty"` // 可选，用于关联的webhook
 }
 
 type UpdateProjectRequest struct {
-	Name              string `json:"name"`
-	URL               string `json:"url" binding:"omitempty,url"`
-	Description       string `json:"description"`
-	AccessToken       string `json:"access_token"`
-	AutoManageWebhook *bool  `json:"auto_manage_webhook,omitempty"`
-	WebhookIDs        []uint `json:"webhook_ids"`
+	Name        string `json:"name"`
+	URL         string `json:"url" binding:"omitempty,url"`
+	Description string `json:"description"`
+	AccessToken string `json:"access_token"`
+	WebhookIDs  []uint `json:"webhook_ids"`
 }
 
 type ProjectResponse struct {
-	ID                uint              `json:"id"`
-	GitLabProjectID   int               `json:"gitlab_project_id"`
-	Name              string            `json:"name"`
-	URL               string            `json:"url"`
-	Description       string            `json:"description"`
-	GitLabWebhookID   *int              `json:"gitlab_webhook_id,omitempty"`
-	WebhookSynced     bool              `json:"webhook_synced"`
-	AutoManageWebhook bool              `json:"auto_manage_webhook"`
-	LastSyncAt        *time.Time        `json:"last_sync_at,omitempty"`
-	CreatedAt         time.Time         `json:"created_at"`
-	UpdatedAt         time.Time         `json:"updated_at"`
-	Webhooks          []WebhookResponse `json:"webhooks,omitempty"`
+	ID              uint              `json:"id"`
+	GitLabProjectID int               `json:"gitlab_project_id"`
+	Name            string            `json:"name"`
+	URL             string            `json:"url"`
+	Description     string            `json:"description"`
+	GitLabWebhookID *int              `json:"gitlab_webhook_id,omitempty"`
+	WebhookSynced   bool              `json:"webhook_synced"`
+	LastSyncAt      *time.Time        `json:"last_sync_at,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	Webhooks        []WebhookResponse `json:"webhooks,omitempty"`
 }
 
 // ParseProjectURLRequest 解析GitLab项目URL的请求结构

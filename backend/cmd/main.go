@@ -141,6 +141,7 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 				projects.POST("/:id/sync-gitlab-webhook", h.SyncGitLabWebhook).Use(h.GetOwnershipChecker().CheckProjectOwnership())
 				projects.DELETE("/:id/sync-gitlab-webhook", h.DeleteGitLabWebhook).Use(h.GetOwnershipChecker().CheckProjectOwnership())
 				projects.GET("/:id/gitlab-webhook-status", h.GetGitLabWebhookStatus).Use(h.GetOwnershipChecker().CheckProjectOwnership())
+				projects.POST("/batch-check-webhook-status", h.BatchCheckWebhookStatus)
 			}
 
 			// GitLab相关API

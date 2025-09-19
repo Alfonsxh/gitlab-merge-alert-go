@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gitlab-merge-alert-go/internal/middleware"
@@ -76,17 +77,16 @@ func (h *Handler) GetProjects(c *gin.Context) {
 	responses := make([]models.ProjectResponse, 0) // 确保是空数组而不是nil
 	for _, project := range projects {
 		response := models.ProjectResponse{
-			ID:                project.ID,
-			GitLabProjectID:   project.GitLabProjectID,
-			Name:              project.Name,
-			URL:               project.URL,
-			Description:       project.Description,
-			GitLabWebhookID:   project.GitLabWebhookID,
-			WebhookSynced:     project.WebhookSynced,
-			AutoManageWebhook: project.AutoManageWebhook,
-			LastSyncAt:        project.LastSyncAt,
-			CreatedAt:         project.CreatedAt,
-			UpdatedAt:         project.UpdatedAt,
+			ID:              project.ID,
+			GitLabProjectID: project.GitLabProjectID,
+			Name:            project.Name,
+			URL:             project.URL,
+			Description:     project.Description,
+			GitLabWebhookID: project.GitLabWebhookID,
+			WebhookSynced:   project.WebhookSynced,
+			LastSyncAt:      project.LastSyncAt,
+			CreatedAt:       project.CreatedAt,
+			UpdatedAt:       project.UpdatedAt,
 		}
 
 		// 转换关联的webhooks
@@ -139,11 +139,6 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		}
 	}
 
-	// 设置默认值
-	autoManageWebhook := true
-	if req.AutoManageWebhook != nil {
-		autoManageWebhook = *req.AutoManageWebhook
-	}
 
 	// 检查项目是否已存在
 	var existingProject models.Project
@@ -165,13 +160,12 @@ func (h *Handler) CreateProject(c *gin.Context) {
 
 	// 创建新项目
 	project := &models.Project{
-		GitLabProjectID:   req.GitLabProjectID,
-		Name:              req.Name,
-		URL:               req.URL,
-		Description:       req.Description,
-		AutoManageWebhook: autoManageWebhook,
-		WebhookSynced:     false,
-		CreatedBy:         &accountID,
+		GitLabProjectID: req.GitLabProjectID,
+		Name:            req.Name,
+		URL:             req.URL,
+		Description:     req.Description,
+		WebhookSynced:   false,
+		CreatedBy:       &accountID,
 	}
 
 	if err := h.db.Create(project).Error; err != nil {
@@ -199,10 +193,8 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		}
 	}
 
-	// 如果启用了自动管理webhook，尝试创建GitLab webhook
-	if project.AutoManageWebhook {
-		h.autoCreateGitLabWebhook(project, token)
-	}
+	// 自动尝试创建GitLab webhook
+	h.autoCreateGitLabWebhook(project, token)
 
 	logger.GetLogger().Infof("Successfully created project [ID: %d, GitLab ID: %d, Name: %s] from IP: %s",
 		project.ID, project.GitLabProjectID, project.Name, c.ClientIP())
@@ -213,10 +205,9 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		Name:              project.Name,
 		URL:               project.URL,
 		Description:       project.Description,
-		GitLabWebhookID:   project.GitLabWebhookID,
-		WebhookSynced:     project.WebhookSynced,
-		AutoManageWebhook: project.AutoManageWebhook,
-		LastSyncAt:        project.LastSyncAt,
+		GitLabWebhookID: project.GitLabWebhookID,
+		WebhookSynced:   project.WebhookSynced,
+		LastSyncAt:      project.LastSyncAt,
 		CreatedAt:         project.CreatedAt,
 		UpdatedAt:         project.UpdatedAt,
 	}
@@ -254,9 +245,6 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		project.Description = req.Description
 	}
 	providedToken := strings.TrimSpace(req.AccessToken)
-	if req.AutoManageWebhook != nil {
-		project.AutoManageWebhook = *req.AutoManageWebhook
-	}
 
 	// 更新 Webhook 关联
 	if req.WebhookIDs != nil {
@@ -290,21 +278,11 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		}
 	}
 
-	if project.AutoManageWebhook {
-		token, err := h.resolveGitLabToken(c, providedToken)
-		if err != nil {
-			if errors.Is(err, errGitLabTokenMissing) {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "当前账户未配置 GitLab Personal Access Token，无法启用自动Webhook管理"})
-				return
-			}
-			if errors.Is(err, errUnauthorized) {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-				return
-			}
-			logger.GetLogger().Errorf("Failed to resolve GitLab token for project update [ID: %d]: %v", project.ID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新项目失败"})
-			return
-		}
+	// 自动更新 GitLab webhook
+	token, err := h.resolveGitLabToken(c, providedToken)
+	if err != nil {
+		logger.GetLogger().Warnf("Failed to resolve GitLab token: %v", err)
+	} else {
 		h.autoCreateGitLabWebhook(&project, token)
 	}
 
@@ -333,10 +311,9 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		Name:              project.Name,
 		URL:               project.URL,
 		Description:       project.Description,
-		GitLabWebhookID:   project.GitLabWebhookID,
-		WebhookSynced:     project.WebhookSynced,
-		AutoManageWebhook: project.AutoManageWebhook,
-		LastSyncAt:        project.LastSyncAt,
+		GitLabWebhookID: project.GitLabWebhookID,
+		WebhookSynced:   project.WebhookSynced,
+		LastSyncAt:      project.LastSyncAt,
 		CreatedAt:         project.CreatedAt,
 		UpdatedAt:         project.UpdatedAt,
 	}
@@ -752,10 +729,9 @@ func (h *Handler) BatchCreateProjects(c *gin.Context) {
 		project := &models.Project{
 			GitLabProjectID:   projectInfo.GitLabProjectID,
 			Name:              projectInfo.Name,
-			URL:               projectInfo.URL,
-			Description:       projectInfo.Description,
-			AutoManageWebhook: true, // 批量创建时默认启用自动管理
-			WebhookSynced:     false,
+			URL:           projectInfo.URL,
+			Description:   projectInfo.Description,
+			WebhookSynced: false,
 			CreatedBy:         &accountID,
 		}
 
@@ -863,11 +839,7 @@ func (h *Handler) SyncGitLabWebhook(c *gin.Context) {
 		return
 	}
 
-	// 检查是否启用自动管理webhook
-	if !project.AutoManageWebhook {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "项目未启用自动webhook管理"})
-		return
-	}
+	// 所有项目都支持同步 GitLab Webhook
 
 	// 解析GitLab URL以获取基础URL
 	parsed := h.gitlabService.ParseGitLabURL(project.URL)
@@ -1039,6 +1011,8 @@ func (h *Handler) GetGitLabWebhookStatus(c *gin.Context) {
 
 	// 检查是否有权限管理webhook（通过测试连接来判断）
 	canManage := false
+	actualSynced := project.WebhookSynced // 默认使用数据库中的状态
+
 	token, tokenErr := h.resolveGitLabToken(c, "")
 	if tokenErr != nil {
 		if errors.Is(tokenErr, errUnauthorized) {
@@ -1051,15 +1025,61 @@ func (h *Handler) GetGitLabWebhookStatus(c *gin.Context) {
 	} else if token != "" {
 		parsed := h.gitlabService.ParseGitLabURL(project.URL)
 		if parsed.IsValid {
+			// 测试连接以确认是否有权限
 			if err := h.gitlabService.TestConnection(parsed.BaseURL, token); err == nil {
 				canManage = true
+
+				// 实时检查 GitLab 上的 webhook 状态
+				existingWebhook, err := h.gitlabService.FindWebhookByURL(
+					parsed.BaseURL,
+					project.GitLabProjectID,
+					webhookURL,
+					token,
+				)
+
+				// 根据实际情况更新状态
+				actualSynced = (existingWebhook != nil && err == nil)
+
+				// 如果状态不一致，更新数据库
+				if actualSynced != project.WebhookSynced {
+					updateData := map[string]interface{}{
+						"webhook_synced": actualSynced,
+					}
+
+					if actualSynced && existingWebhook != nil {
+						updateData["gitlab_webhook_id"] = existingWebhook.ID
+					} else {
+						updateData["gitlab_webhook_id"] = nil
+					}
+
+					now := time.Now()
+					updateData["last_sync_at"] = &now
+
+					if err := h.db.Model(&project).Updates(updateData).Error; err != nil {
+						logger.GetLogger().Warnf("Failed to update project %d webhook status: %v", project.ID, err)
+					} else {
+						logger.GetLogger().Infof("Updated project %d webhook status from %v to %v",
+							project.ID, project.WebhookSynced, actualSynced)
+
+						// 更新内存中的项目对象
+						project.WebhookSynced = actualSynced
+						if actualSynced && existingWebhook != nil {
+							project.GitLabWebhookID = &existingWebhook.ID
+						} else {
+							project.GitLabWebhookID = nil
+						}
+						project.LastSyncAt = &now
+					}
+				}
+			} else {
+				logger.GetLogger().Debugf("Cannot manage webhook for project %d: %v", project.ID, err)
 			}
 		}
 	}
 
 	response := models.GitLabWebhookStatusResponse{
 		ProjectID:       project.ID,
-		WebhookSynced:   project.WebhookSynced,
+		WebhookSynced:   actualSynced,
 		GitLabWebhookID: project.GitLabWebhookID,
 		WebhookURL:      webhookURL,
 		LastSyncAt:      project.LastSyncAt,
@@ -1145,4 +1165,176 @@ func (h *Handler) autoDeleteGitLabWebhook(project *models.Project, token string)
 	} else {
 		logger.GetLogger().Infof("项目 %d 未找到匹配的GitLab webhook，可能已被手动删除", project.ID)
 	}
+}
+
+// BatchCheckWebhookStatus 批量并发检查所有项目的webhook状态
+func (h *Handler) BatchCheckWebhookStatus(c *gin.Context) {
+	var projects []models.Project
+
+	// 获取用户的所有项目
+	query := h.db.Preload("Webhooks")
+	query = middleware.ApplyOwnershipFilter(c, query, "projects")
+
+	if err := query.Find(&projects).Error; err != nil {
+		logger.GetLogger().Errorf("Failed to fetch projects for batch webhook check: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
+		return
+	}
+
+	if len(projects) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}, "message": "No projects to check"})
+		return
+	}
+
+	// 获取 GitLab token
+	token, tokenErr := h.resolveGitLabToken(c, "")
+	if tokenErr != nil {
+		if errors.Is(tokenErr, errUnauthorized) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		if errors.Is(tokenErr, errGitLabTokenMissing) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "当前账户未配置 GitLab Personal Access Token"})
+			return
+		}
+		logger.GetLogger().Errorf("Failed to resolve GitLab token for batch check: %v", tokenErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解析凭证失败"})
+		return
+	}
+
+	webhookURL := h.gitlabService.BuildWebhookURL(h.config.PublicWebhookURL)
+
+	// 定义结果结构
+	type CheckResult struct {
+		ProjectID       uint   `json:"project_id"`
+		ProjectName     string `json:"project_name"`
+		WebhookSynced   bool   `json:"webhook_synced"`
+		PreviousStatus  bool   `json:"previous_status"`
+		StatusChanged   bool   `json:"status_changed"`
+		Error           string `json:"error,omitempty"`
+		GitLabWebhookID *int   `json:"gitlab_webhook_id,omitempty"`
+	}
+
+	// 使用 channel 收集结果
+	resultChan := make(chan CheckResult, len(projects))
+	var wg sync.WaitGroup
+
+	// 限制并发数为 10，避免对 GitLab API 造成过大压力
+	semaphore := make(chan struct{}, 10)
+
+	// 启动 goroutines 进行并发检查
+	for _, project := range projects {
+		wg.Add(1)
+		go func(p models.Project) {
+			defer wg.Done()
+
+			// 获取信号量
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			result := CheckResult{
+				ProjectID:      p.ID,
+				ProjectName:    p.Name,
+				PreviousStatus: p.WebhookSynced,
+			}
+
+			// 解析项目 URL
+			parsed := h.gitlabService.ParseGitLabURL(p.URL)
+			if !parsed.IsValid {
+				result.Error = "Invalid project URL"
+				result.WebhookSynced = p.WebhookSynced
+				resultChan <- result
+				return
+			}
+
+			// 检查 GitLab 上的实际 webhook
+			existingWebhook, err := h.gitlabService.FindWebhookByURL(
+				parsed.BaseURL,
+				p.GitLabProjectID,
+				webhookURL,
+				token,
+			)
+
+			if err != nil {
+				result.Error = fmt.Sprintf("Failed to check webhook: %v", err)
+				result.WebhookSynced = p.WebhookSynced
+				logger.GetLogger().Warnf("Failed to check webhook for project %d: %v", p.ID, err)
+			} else {
+				// 设置实际状态
+				result.WebhookSynced = (existingWebhook != nil)
+				if existingWebhook != nil {
+					result.GitLabWebhookID = &existingWebhook.ID
+				}
+
+				// 检查状态是否改变
+				result.StatusChanged = (result.WebhookSynced != p.WebhookSynced)
+
+				// 如果状态发生变化，更新数据库
+				if result.StatusChanged {
+					updateData := map[string]interface{}{
+						"webhook_synced": result.WebhookSynced,
+					}
+
+					if result.WebhookSynced && existingWebhook != nil {
+						updateData["gitlab_webhook_id"] = existingWebhook.ID
+					} else {
+						updateData["gitlab_webhook_id"] = nil
+					}
+
+					now := time.Now()
+					updateData["last_sync_at"] = &now
+
+					if err := h.db.Model(&p).Updates(updateData).Error; err != nil {
+						logger.GetLogger().Errorf("Failed to update project %d webhook status: %v", p.ID, err)
+						result.Error = "Failed to update database"
+					} else {
+						logger.GetLogger().Infof("Batch check updated project %d webhook status from %v to %v",
+							p.ID, p.WebhookSynced, result.WebhookSynced)
+					}
+				}
+			}
+
+			resultChan <- result
+		}(project)
+	}
+
+	// 等待所有 goroutine 完成
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// 收集所有结果
+	var results []CheckResult
+	var successCount, errorCount, changedCount int
+
+	for result := range resultChan {
+		results = append(results, result)
+		if result.Error == "" {
+			successCount++
+			if result.StatusChanged {
+				changedCount++
+			}
+		} else {
+			errorCount++
+		}
+	}
+
+	// 构建响应
+	response := gin.H{
+		"data": results,
+		"summary": gin.H{
+			"total":         len(projects),
+			"success":       successCount,
+			"errors":        errorCount,
+			"status_changed": changedCount,
+		},
+		"message": fmt.Sprintf("检查完成: %d 个项目, %d 个成功, %d 个失败, %d 个状态已更新",
+			len(projects), successCount, errorCount, changedCount),
+	}
+
+	logger.GetLogger().Infof("Batch webhook status check completed: %d projects, %d success, %d errors, %d changed",
+		len(projects), successCount, errorCount, changedCount)
+
+	c.JSON(http.StatusOK, response)
 }

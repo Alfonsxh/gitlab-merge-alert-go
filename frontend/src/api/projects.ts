@@ -7,7 +7,6 @@ export interface Project {
   gitlab_project_id: number
   description?: string
   webhook_synced: boolean
-  auto_manage_webhook: boolean
   created_at: string
   updated_at: string
   webhooks?: any[]
@@ -57,7 +56,11 @@ export const projectsApi = {
   getGitLabWebhookStatus(id: number) {
     return apiClient.get(`/projects/${id}/gitlab-webhook-status`)
   },
-  
+
+  batchCheckWebhookStatus() {
+    return apiClient.post('/projects/batch-check-webhook-status')
+  },
+
   createProjectWebhook(data: { project_id: number; webhook_id: number }) {
     return apiClient.post('/project-webhooks', data)
   },
