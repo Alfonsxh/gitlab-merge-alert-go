@@ -271,8 +271,8 @@ const handleClose = () => {
 
 .project-list {
 .project-list {
-  flex: 0 0 auto;
-  max-height: 300px;
+  flex: 1 1 auto;
+  max-height: calc(70vh - 230px);
   overflow-y: auto;
   padding: 12px;
   border: 1px solid #ebeef5;
@@ -347,7 +347,7 @@ const handleClose = () => {
 }
 
 .section-divider {
-  margin: 24px 0 16px;
+  margin: 16px 0 12px;
 }
 
 .mb-3 {
