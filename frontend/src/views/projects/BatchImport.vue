@@ -3,10 +3,10 @@
     v-model="visible"
     class="batch-import-dialog"
     title="批量导入项目"
-    width="900px"
+    :width="dialogWidth"
     :close-on-click-modal="false"
     :body-style="dialogBodyStyle"
-    align-center
+    destroy-on-close
     @closed="handleClose"
   >
     <div v-if="projects.length > 0" class="dialog-content">
@@ -109,8 +109,11 @@ const selectedProjects = ref<number[]>([])
 const availableWebhooks = ref<any[]>([])
 const submitting = ref(false)
 const dialogBodyStyle = {
-  padding: '0 24px 24px'
+  padding: '0 24px 24px',
+  overflow: 'hidden'
 }
+
+const dialogWidth = 'clamp(340px, 80vw, 900px)'
 
 const webhookConfig = ref({
   useUnified: true,
@@ -217,25 +220,35 @@ const handleClose = () => {
 <style scoped lang="less">
 .batch-import-dialog {
   :deep(.el-dialog) {
-    max-height: calc(100vh - 120px);
+    width: 100%;
+    max-width: 900px;
+    max-height: calc(100vh - 48px);
     display: flex;
     flex-direction: column;
+    margin: 24px auto !important;
+  }
+
+  :deep(.el-dialog__header) {
+    padding: 20px 24px 12px;
   }
 
   :deep(.el-dialog__body) {
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
+    min-height: 0;
   }
 
   :deep(.el-dialog__footer) {
     padding: 16px 24px 24px;
   }
+}
+
 .dialog-content {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .project-section {
@@ -247,6 +260,7 @@ const handleClose = () => {
 
 .webhook-section {
   flex-shrink: 0;
+  padding-bottom: 8px;
 }
 
 .selection-bar {
@@ -256,7 +270,9 @@ const handleClose = () => {
 }
 
 .project-list {
-  flex: 1 1 auto;
+.project-list {
+  flex: 0 0 auto;
+  max-height: 300px;
   overflow-y: auto;
   padding: 12px;
   border: 1px solid #ebeef5;
