@@ -70,9 +70,11 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useSystemStore } from '@/stores/system'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const systemStore = useSystemStore()
 
 const loginForm = ref({
   username: '',
@@ -94,7 +96,14 @@ const handleLogin = async () => {
     const redirect = router.currentRoute.value.query.redirect as string || '/'
     router.push(redirect)
   } catch (err: any) {
-    error.value = err.response?.data?.error || '登录失败，请重试'
+    const message = err.response?.data?.error
+    if (message === 'Password reset required') {
+      systemStore.markAdminSetupRequired()
+      const redirectTarget = (router.currentRoute.value.query.redirect as string) || '/'
+      router.push({ path: '/setup-admin', query: { redirect: redirectTarget } })
+      return
+    }
+    error.value = message || '登录失败，请重试'
   } finally {
     loading.value = false
   }

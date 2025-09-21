@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,64 +24,62 @@ const (
 
 type AuthMiddleware struct {
 	jwtManager *auth.JWTManager
+	db         *gorm.DB
 }
 
-func NewAuthMiddleware(jwtSecret string) *AuthMiddleware {
-	// 这里使用较长的过期时间，实际的过期时间由 JWT token 自身控制
+func NewAuthMiddleware(db *gorm.DB, jwtSecret string) *AuthMiddleware {
 	jwtManager := auth.NewJWTManager(jwtSecret, 0)
 	return &AuthMiddleware{
 		jwtManager: jwtManager,
+		db:         db,
 	}
 }
 
-// RequireAuth 验证用户是否已登录
 func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := m.extractToken(c)
 		if token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "Missing authorization token",
-			})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization token"})
 			return
 		}
 
-		// 验证 token
 		claims, err := m.jwtManager.Verify(token)
 		if err != nil {
-			if err == auth.ErrExpiredToken {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-					"error": "Token has expired",
-				})
-			} else {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-					"error": "Invalid token",
-				})
-			}
+			m.handleTokenError(c, err)
 			return
 		}
 
-		// 将用户信息存入上下文
-		c.Set(ContextKeyAccountID, claims.UserID)
-		c.Set(ContextKeyRole, claims.Role)
+		account, err := m.loadAccount(claims.UserID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		if !account.IsActive {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Account is not active"})
+			return
+		}
+
+		if account.ForcePasswordReset {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Password reset required"})
+			return
+		}
+
+		m.setContext(c, account)
 		c.Next()
 	}
 }
 
-// RequireAdmin 验证用户是否为管理员
 func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get(ContextKeyRole)
 		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "Unauthorized",
-			})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
 
 		if role != models.RoleAdmin {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error": "Admin access required",
-			})
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
 			return
 		}
 
@@ -88,7 +87,6 @@ func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
 	}
 }
 
-// OptionalAuth 可选的认证，如果有 token 则验证，没有也放行
 func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := m.extractToken(c)
@@ -97,19 +95,28 @@ func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 验证 token
 		claims, err := m.jwtManager.Verify(token)
-		if err == nil {
-			// token 有效，存入上下文
-			c.Set(ContextKeyAccountID, claims.UserID)
-			c.Set(ContextKeyRole, claims.Role)
+		if err != nil {
+			c.Next()
+			return
 		}
-		// 无论 token 是否有效都继续
+
+		account, err := m.loadAccount(claims.UserID)
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		if !account.IsActive || account.ForcePasswordReset {
+			c.Next()
+			return
+		}
+
+		m.setContext(c, account)
 		c.Next()
 	}
 }
 
-// extractToken 从请求头中提取 token
 func (m *AuthMiddleware) extractToken(c *gin.Context) string {
 	authHeader := c.GetHeader(AuthorizationHeader)
 	if authHeader == "" {
@@ -123,35 +130,57 @@ func (m *AuthMiddleware) extractToken(c *gin.Context) string {
 	return strings.TrimPrefix(authHeader, BearerPrefix)
 }
 
-// GetAccountID 从上下文中获取当前用户 ID
+func (m *AuthMiddleware) handleTokenError(c *gin.Context, err error) {
+	if err == auth.ErrExpiredToken {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token has expired"})
+		return
+	}
+
+	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+}
+
+func (m *AuthMiddleware) loadAccount(id uint) (*models.Account, error) {
+	var account models.Account
+	if err := m.db.First(&account, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, err
+	}
+	return &account, nil
+}
+
+func (m *AuthMiddleware) setContext(c *gin.Context, account *models.Account) {
+	c.Set(ContextKeyAccount, account)
+	c.Set(ContextKeyAccountID, account.ID)
+	c.Set(ContextKeyRole, account.Role)
+}
+
 func GetAccountID(c *gin.Context) (uint, bool) {
 	accountID, exists := c.Get(ContextKeyAccountID)
 	if !exists {
 		return 0, false
 	}
-	
+
 	id, ok := accountID.(uint)
 	return id, ok
 }
 
-// GetRole 从上下文中获取当前用户角色
 func GetRole(c *gin.Context) (string, bool) {
 	role, exists := c.Get(ContextKeyRole)
 	if !exists {
 		return "", false
 	}
-	
+
 	roleStr, ok := role.(string)
 	return roleStr, ok
 }
 
-// IsAdmin 检查当前用户是否为管理员
 func IsAdmin(c *gin.Context) bool {
 	role, exists := GetRole(c)
 	return exists && role == models.RoleAdmin
 }
 
-// RequireResourcePermission 资源权限验证中间件
 func RequireResourcePermission(db *gorm.DB, resourceType models.ResourceType) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		accountID, exists := GetAccountID(c)
@@ -162,14 +191,12 @@ func RequireResourcePermission(db *gorm.DB, resourceType models.ResourceType) gi
 		}
 
 		role, _ := GetRole(c)
-		
-		// 管理员拥有所有权限
+
 		if role == models.RoleAdmin {
 			c.Next()
 			return
 		}
 
-		// 获取资源ID
 		var resourceID uint
 		idParam := c.Param("id")
 		if idParam != "" {
@@ -182,14 +209,12 @@ func RequireResourcePermission(db *gorm.DB, resourceType models.ResourceType) gi
 			resourceID = uint(id)
 		}
 
-		// 如果是查看列表，则设置标记让handler过滤
 		if c.Request.Method == "GET" && resourceID == 0 {
 			c.Set("filter_by_permission", true)
 			c.Next()
 			return
 		}
 
-		// 检查是否有权限
 		if resourceID > 0 {
 			rmService := services.NewResourceManagerService(db)
 			if !rmService.HasPermission(accountID, role, resourceID, resourceType) {
@@ -203,7 +228,6 @@ func RequireResourcePermission(db *gorm.DB, resourceType models.ResourceType) gi
 	}
 }
 
-// RequireSelfOrAdmin 验证是否是自己的资源或管理员
 func RequireSelfOrAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		accountID, exists := GetAccountID(c)
@@ -214,14 +238,12 @@ func RequireSelfOrAdmin() gin.HandlerFunc {
 		}
 
 		role, _ := GetRole(c)
-		
-		// 管理员可以访问所有
+
 		if role == models.RoleAdmin {
 			c.Next()
 			return
 		}
 
-		// 检查是否是访问自己的资源
 		targetIDStr := c.Param("id")
 		if targetIDStr != "" {
 			var targetID uint

@@ -27,6 +27,8 @@ export interface AccountResponse {
   role: string
   avatar?: string
   is_active: boolean
+  force_password_reset: boolean
+  password_initialized_at?: string
   last_login_at?: string
   created_at: string
   updated_at: string

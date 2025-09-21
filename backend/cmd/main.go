@@ -77,6 +77,12 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 	// API路由
 	api := router.Group("/api/v1")
 	{
+		system := api.Group("/system")
+		{
+			system.GET("/bootstrap", h.GetBootstrapStatus)
+			system.POST("/setup-admin", h.SetupAdmin)
+		}
+
 		// 公开路由（无需认证）
 		// 认证相关
 		auth := api.Group("/auth")

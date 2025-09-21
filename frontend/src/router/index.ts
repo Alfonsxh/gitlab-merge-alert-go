@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import MainLayout from '@/layouts/MainLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useSystemStore } from '@/stores/system'
 import { setFaviconFromAvatar } from '@/utils/favicon'
 
 const routes: RouteRecordRaw[] = [
@@ -16,6 +17,12 @@ const routes: RouteRecordRaw[] = [
     name: 'Register',
     component: () => import('@/views/auth/Register.vue'),
     meta: { title: '注册', requiresAuth: false }
+  },
+  {
+    path: '/setup-admin',
+    name: 'SetupAdmin',
+    component: () => import('@/views/system/SetupAdmin.vue'),
+    meta: { title: '管理员初始化', requiresAuth: false }
   },
   {
     path: '/',
@@ -75,7 +82,20 @@ const router = createRouter({
 // 全局路由守卫
 router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
-  
+  const systemStore = useSystemStore()
+
+  const setupRequired = await systemStore.checkAdminSetup()
+
+  if (setupRequired && to.path !== '/setup-admin') {
+    const redirect = to.fullPath !== '/setup-admin' ? to.fullPath : undefined
+    return next({ path: '/setup-admin', query: redirect ? { redirect } : undefined })
+  }
+
+  if (!setupRequired && to.path === '/setup-admin') {
+    const redirect = (to.query.redirect as string) || '/login'
+    return next(redirect)
+  }
+
   // 设置页面标题
   document.title = `${to.meta.title} - GitLab Merge Alert` || 'GitLab Merge Alert'
   

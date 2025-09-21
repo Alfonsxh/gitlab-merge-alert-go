@@ -6,17 +6,21 @@ import (
 )
 
 type Account struct {
-	ID                uint       `json:"id" gorm:"column:id;primarykey"`
-	Username          string     `json:"username" gorm:"column:username;uniqueIndex;not null"`
-	PasswordHash      string     `json:"-" gorm:"column:password_hash;not null"`
-	Email             string     `json:"email" gorm:"column:email;uniqueIndex;not null"`
-	Role              string     `json:"role" gorm:"column:role;default:'user'"`
-	Avatar            string     `json:"avatar" gorm:"column:avatar;type:text"`
-	GitLabAccessToken string     `json:"-" gorm:"column:gitlab_access_token"`
-	IsActive          bool       `json:"is_active" gorm:"column:is_active;default:true"`
-	LastLoginAt       *time.Time `json:"last_login_at,omitempty" gorm:"column:last_login_at"`
-	CreatedAt         time.Time  `json:"created_at" gorm:"column:created_at"`
-	UpdatedAt         time.Time  `json:"updated_at" gorm:"column:updated_at"`
+	ID                         uint       `json:"id" gorm:"column:id;primarykey"`
+	Username                   string     `json:"username" gorm:"column:username;uniqueIndex;not null"`
+	PasswordHash               string     `json:"-" gorm:"column:password_hash;not null"`
+	Email                      string     `json:"email" gorm:"column:email;uniqueIndex;not null"`
+	Role                       string     `json:"role" gorm:"column:role;default:'user'"`
+	Avatar                     string     `json:"avatar" gorm:"column:avatar;type:text"`
+	GitLabAccessToken          string     `json:"-" gorm:"column:gitlab_access_token"`
+	IsActive                   bool       `json:"is_active" gorm:"column:is_active;default:true"`
+	LastLoginAt                *time.Time `json:"last_login_at,omitempty" gorm:"column:last_login_at"`
+	ForcePasswordReset         bool       `json:"force_password_reset" gorm:"column:force_password_reset;default:false"`
+	PasswordInitializedAt      *time.Time `json:"password_initialized_at,omitempty" gorm:"column:password_initialized_at"`
+	AdminSetupTokenHash        string     `json:"-" gorm:"column:admin_setup_token_hash"`
+	AdminSetupTokenGeneratedAt *time.Time `json:"-" gorm:"column:admin_setup_token_generated_at"`
+	CreatedAt                  time.Time  `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt                  time.Time  `json:"updated_at" gorm:"column:updated_at"`
 }
 
 const (
@@ -68,6 +72,8 @@ type AccountResponse struct {
 	Role                         string     `json:"role"`
 	Avatar                       string     `json:"avatar"`
 	IsActive                     bool       `json:"is_active"`
+	ForcePasswordReset           bool       `json:"force_password_reset"`
+	PasswordInitializedAt        *time.Time `json:"password_initialized_at,omitempty"`
 	LastLoginAt                  *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt                    time.Time  `json:"created_at"`
 	UpdatedAt                    time.Time  `json:"updated_at"`
@@ -92,9 +98,17 @@ func (a *Account) ToResponse() *AccountResponse {
 		Role:                         a.Role,
 		Avatar:                       a.Avatar,
 		IsActive:                     a.IsActive,
+		ForcePasswordReset:           a.ForcePasswordReset,
+		PasswordInitializedAt:        a.PasswordInitializedAt,
 		LastLoginAt:                  a.LastLoginAt,
 		CreatedAt:                    a.CreatedAt,
 		UpdatedAt:                    a.UpdatedAt,
 		HasGitLabPersonalAccessToken: strings.TrimSpace(a.GitLabAccessToken) != "",
 	}
+}
+
+type SetupAdminRequest struct {
+	Token    string `json:"token" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
 }

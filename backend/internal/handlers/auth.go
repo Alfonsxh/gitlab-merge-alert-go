@@ -58,6 +58,10 @@ func (h *Handler) Login(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Account is not active"})
 			return
 		}
+		if err == services.ErrPasswordResetRequired {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Password reset required"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed"})
 		return
 	}

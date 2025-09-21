@@ -81,7 +81,12 @@ apiClient.interceptors.response.use(
         })
       }
     } else if (response?.status === 403) {
-      ElMessage.error('您没有权限执行此操作')
+      const message = (response?.data as any)?.error
+      if (message && message !== 'Password reset required') {
+        ElMessage.error(message)
+      } else if (!message) {
+        ElMessage.error('您没有权限执行此操作')
+      }
     } else {
       const message = (response?.data as any)?.error || error.message || '请求失败'
       ElMessage.error(message)

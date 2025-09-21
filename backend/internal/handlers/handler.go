@@ -40,7 +40,7 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 	}
 
 	authService := services.NewAuthService(db, jwtSecret, jwtDuration)
-	authMiddleware := middleware.NewAuthMiddleware(jwtSecret)
+	authMiddleware := middleware.NewAuthMiddleware(db, jwtSecret)
 	ownershipChecker := middleware.NewOwnershipChecker(db)
 
 	return &Handler{

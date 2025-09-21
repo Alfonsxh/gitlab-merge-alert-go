@@ -85,6 +85,14 @@ GitLab Merge Request 通知服务的 Golang 重构版本，用于将 GitLab 的�
 
    访问 http://localhost:1688 查看管理界面
 
+### 管理员首次初始化
+
+首次启动时后台会自动创建占位的管理员账号，并在日志中输出一次性 "Admin setup token"。使用流程如下：
+
+1. 在服务启动日志或容器日志中复制最新的 Setup Token。
+2. 打开前端页面的 `/setup-admin`（或在登录页收到提示后跳转），输入 token、管理员邮箱以及新密码完成初始化。
+3. 初始化成功后，使用新密码登录，原 token 会立即失效。若需要重新生成，可重启服务以获取新的 token。
+
 ### Docker 部署
 
 #### 方法1: 使用 Makefile (推荐)
