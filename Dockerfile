@@ -48,11 +48,11 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 COPY backend/ ./
 
 # 从前端构建阶段复制构建好的前端文件（用于嵌入）
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=frontend-builder /app/frontend/dist ./internal/web/frontend_dist
 
 # 构建应用（启用 embed 标签，纯 Go 构建，禁用 CGO）
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -tags embed -a -ldflags '-extldflags "-static"' -o main ./cmd/server
+    CGO_ENABLED=0 GOOS=linux go build -tags embed -a -ldflags '-extldflags "-static"' -o main ./cmd
 
 # 最终镜像 - 最小化 Alpine
 FROM alpine:latest
