@@ -16,11 +16,11 @@ import (
 
 func (h *Handler) GetUsers(c *gin.Context) {
 	var users []models.User
-	
+
 	// 应用所有权过滤
 	query := h.db
 	query = middleware.ApplyOwnershipFilter(c, query, "users")
-	
+
 	if err := query.Find(&users).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to fetch users: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
@@ -30,7 +30,7 @@ func (h *Handler) GetUsers(c *gin.Context) {
 	logger.GetLogger().Debugf("Successfully fetched %d users", len(users))
 
 	// 转换为响应格式
-	var responses []models.UserResponse
+	responses := make([]models.UserResponse, 0, len(users))
 	for _, user := range users {
 		responses = append(responses, models.UserResponse{
 			ID:             user.ID,
@@ -55,7 +55,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 
 	// 获取当前用户ID
 	accountID, _ := middleware.GetAccountID(c)
-	
+
 	user := &models.User{
 		Email:          req.Email,
 		Phone:          req.Phone,

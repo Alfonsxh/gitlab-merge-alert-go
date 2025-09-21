@@ -819,20 +819,24 @@ const loadResourceLists = async () => {
       webhooksApi.getWebhooks({ page_size: 1000 }),
       usersApi.getUsers({ page_size: 1000 })
     ])
-    
-    projectList.value = projects.data.map((p: any) => ({
+
+    const projectData = Array.isArray(projects?.data) ? projects.data : []
+    const webhookData = Array.isArray(webhooks?.data) ? webhooks.data : []
+    const userData = Array.isArray(users?.data) ? users.data : []
+
+    projectList.value = projectData.map((p: any) => ({
       id: p.id,
       name: p.name || p.path,
       disabled: false // 标记资源是否已分配给其他账户
     }))
-    
-    webhookList.value = webhooks.data.map((w: any) => ({
+
+    webhookList.value = webhookData.map((w: any) => ({
       id: w.id,
       name: w.name,
       disabled: false
     }))
-    
-    userList.value = users.data.map((u: any) => ({
+
+    userList.value = userData.map((u: any) => ({
       id: u.id,
       name: `${u.name || u.email} (${u.email})`,
       disabled: false

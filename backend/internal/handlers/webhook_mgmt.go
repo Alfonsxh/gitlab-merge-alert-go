@@ -32,7 +32,7 @@ func (h *Handler) GetWebhooks(c *gin.Context) {
 	logger.GetLogger().Debugf("Successfully fetched %d webhooks", len(webhooks))
 
 	// 转换为响应格式
-	var responses []models.WebhookResponse
+	responses := make([]models.WebhookResponse, 0, len(webhooks))
 	for _, webhook := range webhooks {
 		response := models.WebhookResponse{
 			ID:          webhook.ID,
