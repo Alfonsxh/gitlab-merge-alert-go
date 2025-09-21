@@ -9,12 +9,13 @@
     </div>
     
     <el-card>
-      <el-table
-        :data="webhooks"
-        v-loading="loading"
-        stripe
-        style="width: 100%;"
-      >
+      <div class="table-scroll-wrapper" ref="tableWrapperRef">
+        <el-table
+          :data="webhooks"
+          v-loading="loading"
+          stripe
+          style="min-width: 1000px; width: 100%;"
+        >
         <el-table-column prop="id" label="ID" width="80" />
         
         <el-table-column prop="name" label="名称" min-width="200">
@@ -145,7 +146,8 @@
             </el-popconfirm>
           </template>
         </el-table-column>
-      </el-table>
+        </el-table>
+      </div>
     </el-card>
     
     <!-- 添加/编辑Webhook对话框 -->
@@ -217,43 +219,57 @@
       v-model="testModalVisible"
       title="测试Webhook"
       width="500px"
+      class="webhook-test-dialog"
     >
-      <div v-if="testingWebhook" class="test-content">
-        <el-descriptions :column="1" border>
-          <el-descriptions-item label="名称">
-            {{ testingWebhook.name }}
-          </el-descriptions-item>
-          <el-descriptions-item label="URL">
-            <el-text class="url-text" truncated>{{ testingWebhook.url }}</el-text>
-          </el-descriptions-item>
-        </el-descriptions>
-        
-        <el-divider />
-        
-        <el-button
-          type="primary"
-          :loading="testingSending"
-          @click="sendTestMessage"
-          style="width: 100%"
-        >
-          <el-icon><Promotion /></el-icon>
-          发送测试消息
-        </el-button>
-        
-        <el-alert
-          v-if="testResult"
-          :type="testResult.success ? 'success' : 'error'"
-          :title="testResult.message"
-          :closable="false"
-          class="test-result"
-        />
+      <div v-if="testingWebhook" class="webhook-test-content">
+        <div class="webhook-info-card">
+          <div class="info-row">
+            <span class="info-label">名称</span>
+            <span class="info-value">{{ testingWebhook.name }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">URL</span>
+            <div class="info-value url">
+              <el-text class="url-text" truncated>{{ testingWebhook.url }}</el-text>
+              <el-button
+                v-if="testingWebhook?.url"
+                link
+                size="small"
+                type="primary"
+                @click="copyTestingWebhookUrl"
+              >
+                <el-icon><CopyDocument /></el-icon>
+                复制
+              </el-button>
+            </div>
+          </div>
+        </div>
+
+        <div class="test-actions">
+          <el-button
+            type="primary"
+            :loading="testingSending"
+            @click="sendTestMessage"
+          >
+            <el-icon><Promotion /></el-icon>
+            <span>{{ testingSending ? '发送中...' : '发送测试消息' }}</span>
+          </el-button>
+
+          <el-alert
+            v-if="testResult"
+            :type="testResult.success ? 'success' : 'error'"
+            :title="testResult.message"
+            :closable="false"
+            class="test-result"
+          />
+        </div>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -282,6 +298,7 @@ const isEditing = ref(false)
 const formRef = ref<FormInstance>()
 const testingWebhook = ref<Webhook | null>(null)
 const testResult = ref<{ success: boolean; message: string } | null>(null)
+const tableWrapperRef = ref<HTMLDivElement | null>(null)
 
 const currentWebhook = reactive<Partial<Webhook>>({
   name: '',
@@ -370,6 +387,11 @@ const copyUrl = (url: string) => {
   })
 }
 
+const copyTestingWebhookUrl = () => {
+  if (!testingWebhook.value?.url) return
+  copyUrl(testingWebhook.value.url)
+}
+
 const testWebhook = (webhook: Webhook) => {
   testingWebhook.value = webhook
   testResult.value = null
@@ -378,24 +400,26 @@ const testWebhook = (webhook: Webhook) => {
 
 const sendTestMessage = async () => {
   if (!testingWebhook.value) return
-  
+
   testingSending.value = true
   testResult.value = null
-  
+
   try {
-    // TODO: 调用后端API发送测试消息
-    // 模拟发送
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    
+    const response = await webhooksApi.sendTestMessage(testingWebhook.value.id)
+
     testResult.value = {
       success: true,
-      message: '测试消息发送成功！'
+      message: response.message || '测试消息发送成功！'
     }
-  } catch (error) {
+
+    ElMessage.success(`测试消息已发送到 ${response.webhook_name}`)
+  } catch (error: any) {
     testResult.value = {
       success: false,
-      message: '测试消息发送失败，请检查Webhook配置'
+      message: error.response?.data?.details || error.response?.data?.error || '测试消息发送失败，请检查Webhook配置'
     }
+
+    ElMessage.error(testResult.value.message)
   } finally {
     testingSending.value = false
   }
@@ -408,7 +432,30 @@ const goToProject = (_project: any) => {
 
 onMounted(() => {
   loadWebhooks()
+
+  const wrapper = tableWrapperRef.value
+  if (wrapper) {
+    wrapper.addEventListener('wheel', handleHorizontalScroll, { passive: false })
+  }
 })
+
+onBeforeUnmount(() => {
+  const wrapper = tableWrapperRef.value
+  if (wrapper) {
+    wrapper.removeEventListener('wheel', handleHorizontalScroll)
+  }
+})
+
+const handleHorizontalScroll = (event: WheelEvent) => {
+  const wrapper = tableWrapperRef.value
+  if (!wrapper) return
+
+  // 将垂直滚动转换为水平滚动
+  if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+    event.preventDefault()
+    wrapper.scrollLeft += event.deltaY
+  }
+}
 </script>
 
 <style scoped lang="less">
@@ -483,6 +530,25 @@ onMounted(() => {
   }
 }
 
+.table-scroll-wrapper {
+  overflow: auto;
+  padding-bottom: 4px;
+  scrollbar-color: #c0c4cc transparent;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
+  background-color: rgba(144, 147, 153, 0.6);
+  border-radius: 4px;
+}
+
 // 项目标签样式
 .project-tags {
   .project-tags-compact {
@@ -541,19 +607,90 @@ onMounted(() => {
   margin-top: 5px;
 }
 
-.test-content {
-  .el-descriptions {
-    margin-bottom: 20px;
-    
-    .url-text {
-      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
-      font-size: 12px;
-    }
-  }
-  
-  .test-result {
-    margin-top: 20px;
-  }
+.webhook-test-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.webhook-info-card {
+  background: #f8fbff;
+  border: 1px solid #e4e7ed;
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.webhook-info-card .info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.webhook-info-card .info-label {
+  flex-shrink: 0;
+  width: 56px;
+  font-weight: 600;
+  color: #606266;
+}
+
+.webhook-info-card .info-value {
+  flex: 1;
+  color: #303133;
+  word-break: break-all;
+}
+
+.webhook-info-card .info-value.url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.webhook-info-card .url-text {
+  flex: 1;
+  display: block;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: 13px;
+  background: #fff;
+  border: 1px dashed #cfd6e4;
+  border-radius: 6px;
+  padding: 8px 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.test-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.test-actions .el-button {
+  width: 100%;
+  height: 44px;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.test-actions .el-button .el-icon {
+  font-size: 18px;
+}
+
+.test-actions .test-result {
+  margin: 0;
+}
+
+:deep(.webhook-test-dialog .el-dialog__body) {
+  padding: 26px 24px;
 }
 
 .text-muted {

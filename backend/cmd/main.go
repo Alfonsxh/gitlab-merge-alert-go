@@ -159,6 +159,7 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 				webhooks.POST("", h.CreateWebhook)
 				webhooks.PUT("/:id", h.UpdateWebhook).Use(h.GetOwnershipChecker().CheckWebhookOwnership())
 				webhooks.DELETE("/:id", h.DeleteWebhook).Use(h.GetOwnershipChecker().CheckWebhookOwnership())
+				webhooks.POST("/:id/test", h.SendTestMessage).Use(h.GetOwnershipChecker().CheckWebhookOwnership())
 			}
 
 			// 项目-Webhook关联API

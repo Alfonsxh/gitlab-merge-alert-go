@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
@@ -16,11 +18,11 @@ import (
 
 func (h *Handler) GetWebhooks(c *gin.Context) {
 	var webhooks []models.Webhook
-	
+
 	// 应用所有权过滤
 	query := h.db.Preload("Projects")
 	query = middleware.ApplyOwnershipFilter(c, query, "webhooks")
-	
+
 	if err := query.Find(&webhooks).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to fetch webhooks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch webhooks"})
@@ -70,7 +72,7 @@ func (h *Handler) CreateWebhook(c *gin.Context) {
 
 	// 获取当前用户ID
 	accountID, _ := middleware.GetAccountID(c)
-	
+
 	webhook := &models.Webhook{
 		Name:        req.Name,
 		URL:         req.URL,
@@ -219,8 +221,26 @@ func (h *Handler) LinkProjectWebhook(c *gin.Context) {
 		return
 	}
 
-	// 建立关联
-	if err := h.db.Model(&project).Association("Webhooks").Append(&webhook); err != nil {
+	// 检查是否已经关联，避免重复记录
+	var existing []models.ProjectWebhook
+	if err := h.db.Where("project_id = ? AND webhook_id = ?", project.ID, webhook.ID).Find(&existing).Error; err != nil {
+		logger.GetLogger().Errorf("Failed to check existing project-webhook link [project_id=%d, webhook_id=%d]: %v", project.ID, webhook.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link project and webhook"})
+		return
+	}
+
+	if len(existing) > 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "Project and webhook already linked"})
+		return
+	}
+
+	association := &models.ProjectWebhook{
+		ProjectID: project.ID,
+		WebhookID: webhook.ID,
+	}
+
+	if err := h.db.Create(association).Error; err != nil {
+		logger.GetLogger().Errorf("Failed to create project-webhook link [project_id=%d, webhook_id=%d]: %v", project.ID, webhook.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link project and webhook"})
 		return
 	}
@@ -261,4 +281,79 @@ func (h *Handler) UnlinkProjectWebhook(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Project and webhook unlinked successfully"})
+}
+
+func (h *Handler) SendTestMessage(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid webhook ID"})
+		return
+	}
+
+	// 查找webhook
+	var webhook models.Webhook
+	query := h.db.Model(&models.Webhook{})
+	query = middleware.ApplyOwnershipFilter(c, query, "webhooks")
+
+	if err := query.First(&webhook, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.GetLogger().Warnf("Webhook not found [ID: %d]", id)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Webhook not found"})
+		} else {
+			logger.GetLogger().Errorf("Failed to fetch webhook [ID: %d]: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		}
+		return
+	}
+
+	// 检查webhook是否启用
+	if !webhook.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook is not active"})
+		return
+	}
+
+	// 构建测试消息内容
+	testMessage := fmt.Sprintf(
+		"🔔 GitLab Merge Alert 测试消息\n\n"+
+			"✅ Webhook连接测试成功！\n"+
+			"📌 Webhook名称：%s\n"+
+			"🕐 测试时间：%s\n\n"+
+			"如果您看到这条消息，说明企业微信机器人配置正确。",
+		webhook.Name,
+		time.Now().Format("2006-01-02 15:04:05"),
+	)
+
+	// 发送测试消息
+	if err := h.wechatService.SendMessage(webhook.URL, testMessage, nil); err != nil {
+		logger.GetLogger().Errorf("Failed to send test message to webhook [ID: %d, Name: %s]: %v",
+			webhook.ID, webhook.Name, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "发送测试消息失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 记录通知历史
+	accountID, _ := middleware.GetAccountID(c)
+	notification := &models.Notification{
+		Title:            "Webhook测试",
+		Status:           "success",
+		NotificationSent: true,
+		OwnerID:          &accountID,
+	}
+
+	if err := h.db.Create(notification).Error; err != nil {
+		logger.GetLogger().Warnf("Failed to save test notification history: %v", err)
+		// 不影响主要功能，只记录警告
+	}
+
+	logger.GetLogger().Infof("Successfully sent test message to webhook [ID: %d, Name: %s]",
+		webhook.ID, webhook.Name)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "测试消息发送成功",
+		"webhook_name": webhook.Name,
+		"sent_at":      time.Now().Format("2006-01-02 15:04:05"),
+	})
 }

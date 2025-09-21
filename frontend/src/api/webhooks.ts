@@ -26,5 +26,9 @@ export const webhooksApi = {
 
   deleteWebhook(id: number) {
     return apiClient.delete(`/webhooks/${id}`)
+  },
+
+  sendTestMessage(id: number) {
+    return apiClient.post<any, { message: string; webhook_name: string; sent_at: string }>(`/webhooks/${id}/test`)
   }
 }

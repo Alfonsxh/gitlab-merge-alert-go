@@ -126,13 +126,9 @@
               
               <el-table-column label="操作" width="320" fixed="right">
                 <template #default="{ row }">
-                  <el-button link type="primary" @click="manageWebhooks(row)">
-                    <el-icon><Connection /></el-icon>
-                    管理Webhook
-                  </el-button>
-                  <el-button link type="primary" @click="editProject(row)">
-                    <el-icon><Edit /></el-icon>
-                    编辑
+              <el-button link type="primary" @click="editProject(row)">
+                <el-icon><Edit /></el-icon>
+                编辑
                   </el-button>
                   <el-popconfirm
                     title="确定要删除这个项目吗？"
@@ -158,7 +154,7 @@
     <!-- 添加项目对话框（支持单项目和批量导入） -->
     <el-dialog
       v-model="projectModalVisible"
-      :title="isGroupMode ? `批量导入 - ${groupInfo?.name || ''}` : '添加项目'"
+      :title="projectDialogTitle"
       :width="isGroupMode ? '900px' : '750px'"
       :close-on-click-modal="true"
       :close-on-press-escape="true"
@@ -283,46 +279,144 @@
         </template>
 
         <!-- 单项目模式：显示项目信息和Webhook选择 -->
-        <template v-else-if="!isGroupMode && !parsingUrl && urlParsed">
-          <div class="project-info-box">
-            <div class="project-info-item">
-              <span class="info-label">项目名称:</span>
-              <span class="info-value">{{ currentProject.name }}</span>
+        <template v-else-if="!isGroupMode && !parsingUrl && (urlParsed || isEditing)">
+          <template v-if="isEditing">
+            <div class="edit-project-form">
+              <el-form-item label="项目名称">
+                <el-input
+                  v-model="currentProject.name"
+                  placeholder="请输入项目名称"
+                  maxlength="100"
+                  show-word-limit
+                />
+              </el-form-item>
+              <el-form-item label="GitLab项目ID">
+                <el-input :value="currentProject.gitlab_project_id" disabled />
+              </el-form-item>
+              <el-form-item label="项目URL">
+                <el-input v-model="currentProject.url" disabled />
+              </el-form-item>
+              <el-form-item label="描述">
+                <el-input
+                  v-model="currentProject.description"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="请输入项目描述"
+                  maxlength="200"
+                  show-word-limit
+                />
+              </el-form-item>
             </div>
-            <div class="project-info-item">
-              <span class="info-label">GitLab项目ID:</span>
-              <span class="info-value">{{ currentProject.gitlab_project_id }}</span>
+          </template>
+          <template v-else>
+            <div class="project-info-box">
+              <div class="project-info-item">
+                <span class="info-label">项目名称:</span>
+                <span class="info-value">{{ currentProject.name }}</span>
+              </div>
+              <div class="project-info-item">
+                <span class="info-label">GitLab项目ID:</span>
+                <span class="info-value">{{ currentProject.gitlab_project_id }}</span>
+              </div>
+              <div class="project-info-item" v-if="currentProject.description">
+                <span class="info-label">描述:</span>
+                <span class="info-value">{{ currentProject.description }}</span>
+              </div>
             </div>
-            <div class="project-info-item" v-if="currentProject.description">
-              <span class="info-label">描述:</span>
-              <span class="info-value">{{ currentProject.description }}</span>
-            </div>
-          </div>
+          </template>
 
-          <!-- Webhook配置 -->
           <el-divider />
-          <div class="webhook-config">
-            <h4>Webhook 配置</h4>
-            <el-select
-              v-model="singleProjectWebhookId"
-              placeholder="请选择要关联的企业微信机器人"
-              style="width: 100%"
-            >
-              <el-option
-                v-for="webhook in availableWebhooks"
-                :key="webhook.id"
-                :label="webhook.name"
-                :value="webhook.id"
+
+          <template v-if="isEditing">
+            <div class="webhook-management-card">
+              <div class="card-header">
+                <div class="title">Webhook 配置</div>
+                <div class="actions">
+                  <el-tag size="small" type="info">
+                    已选择 {{ selectedWebhookIds.length }} / {{ availableWebhooks.length }}
+                  </el-tag>
+                  <el-button
+                    size="small"
+                    text
+                    type="primary"
+                    @click="selectAllWebhooks"
+                    :disabled="availableWebhooks.length === 0"
+                  >
+                    全选
+                  </el-button>
+                  <el-button
+                    size="small"
+                    text
+                    type="primary"
+                    @click="clearWebhookSelection"
+                    :disabled="selectedWebhookIds.length === 0"
+                  >
+                    清空
+                  </el-button>
+                </div>
+              </div>
+
+              <el-empty v-if="availableWebhooks.length === 0" description="暂无可用的Webhook">
+                <el-button type="primary" @click="goToWebhooks">前往创建</el-button>
+              </el-empty>
+
+              <div v-else class="webhook-list">
+                <div
+                  v-for="webhook in availableWebhooks"
+                  :key="webhook.id"
+                  class="webhook-item"
+                  :class="{ selected: selectedWebhookIds.includes(webhook.id) }"
+                  @click="toggleWebhook(webhook.id)"
+                >
+                  <el-checkbox
+                    :model-value="selectedWebhookIds.includes(webhook.id)"
+                    @change="setWebhookSelection(webhook.id, $event)"
+                    @click.stop
+                    class="webhook-checkbox"
+                  />
+                  <div class="webhook-content">
+                    <div class="webhook-main">
+                      <el-icon class="webhook-icon"><Connection /></el-icon>
+                      <span class="webhook-name">{{ webhook.name }}</span>
+                    </div>
+                    <div class="webhook-url">{{ formatWebhookUrl(webhook.url) }}</div>
+                  </div>
+                  <el-tag
+                    v-if="selectedWebhookIds.includes(webhook.id)"
+                    type="success"
+                    size="small"
+                    class="selected-tag"
+                  >
+                    已选择
+                  </el-tag>
+                </div>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <div class="webhook-config">
+              <h4>Webhook 配置</h4>
+              <el-select
+                v-model="singleProjectWebhookId"
+                placeholder="请选择要关联的企业微信机器人"
+                style="width: 100%"
               >
-                <span>{{ webhook.name }}</span>
-                <span style="color: #999; margin-left: 10px">{{ formatWebhookUrl(webhook.url) }}</span>
-              </el-option>
-            </el-select>
-          </div>
+                <el-option
+                  v-for="webhook in availableWebhooks"
+                  :key="webhook.id"
+                  :label="webhook.name"
+                  :value="webhook.id"
+                >
+                  <span>{{ webhook.name }}</span>
+                  <span style="color: #999; margin-left: 10px">{{ formatWebhookUrl(webhook.url) }}</span>
+                </el-option>
+              </el-select>
+            </div>
+          </template>
         </template>
       </el-form>
 
-      <template #footer v-if="urlParsed">
+      <template #footer v-if="urlParsed || isEditing">
         <div style="text-align: center;">
           <el-button
             type="primary"
@@ -331,84 +425,11 @@
             :disabled="parsingUrl"
             size="large"
           >
-            {{ isGroupMode ? `批量导入 (${selectedGroupProjects.length})` : '添加项目' }}
+            {{ footerPrimaryLabel }}
           </el-button>
         </div>
       </template>
     </el-dialog>
-    
-    <!-- Webhook管理对话框 -->
-    <el-dialog
-      v-model="webhookModalVisible"
-      title="管理项目Webhook"
-      width="700px"
-      :close-on-click-modal="false"
-    >
-      <div v-if="managingProject" class="webhook-manage-dialog">
-        <div class="project-info-section">
-          <div class="project-label">当前项目</div>
-          <div class="project-details">
-            <div class="project-name">
-              <el-icon><FolderOpened /></el-icon>
-              {{ managingProject.name }}
-            </div>
-            <div class="project-url">{{ managingProject.url }}</div>
-          </div>
-        </div>
-        
-        <div class="webhook-selection">
-          <div class="section-title">选择要关联的企业微信机器人</div>
-          <el-empty v-if="availableWebhooks.length === 0" description="暂无可用的Webhook">
-            <el-button type="primary" @click="goToWebhooks">前往创建</el-button>
-          </el-empty>
-          
-          <div v-else class="webhook-list">
-            <div
-              v-for="webhook in availableWebhooks"
-              :key="webhook.id"
-              class="webhook-item"
-              :class="{ selected: selectedWebhookIds.includes(webhook.id) }"
-              @click="toggleWebhook(webhook.id)"
-            >
-              <el-checkbox
-                :model-value="selectedWebhookIds.includes(webhook.id)"
-                @change="toggleWebhook(webhook.id)"
-                class="webhook-checkbox"
-              />
-              <div class="webhook-content">
-                <div class="webhook-main">
-                  <el-icon class="webhook-icon"><Connection /></el-icon>
-                  <span class="webhook-name">{{ webhook.name }}</span>
-                </div>
-                <div class="webhook-url">{{ formatWebhookUrl(webhook.url) }}</div>
-              </div>
-              <el-tag
-                v-if="selectedWebhookIds.includes(webhook.id)"
-                type="success"
-                size="small"
-                class="selected-tag"
-              >
-                已选择
-              </el-tag>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <template #footer>
-        <el-button @click="webhookModalVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveProjectWebhooks" :loading="submitting">
-          保存（{{ selectedWebhookIds.length }}）
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 批量导入对话框（已整合到主对话框中） -->
-    <!-- <BatchImport
-      v-model="batchModalVisible"
-      :projects="batchProjects"
-      @success="handleBatchImportSuccess"
-    /> -->
   </div>
 </template>
 
@@ -424,7 +445,6 @@ import {
   Link,
   Connection,
   Refresh,
-  FolderOpened,
   Loading
 } from '@element-plus/icons-vue'
 import { projectsApi, webhooksApi } from '@/api'
@@ -441,11 +461,9 @@ const loading = ref(false)
 const syncingWebhook = ref<number | null>(null)
 const batchChecking = ref(false)
 const projectModalVisible = ref(false)
-const webhookModalVisible = ref(false)
 const submitting = ref(false)
 const isEditing = ref(false)
 const autoFilled = ref(false)
-const managingProject = ref<Project | null>(null)
 const selectedWebhookIds = ref<number[]>([])
 const activeGroups = ref<string[]>([])
 // 以下变量已不再需要，功能已整合到主对话框
@@ -489,6 +507,20 @@ const currentProject = reactive<Partial<Project>>({
 })
 
 // 不再需要表单验证规则，通过解析按钮来验证URL
+
+const projectDialogTitle = computed(() => {
+  if (isGroupMode.value) {
+    return `批量导入 - ${groupInfo.value?.name || ''}`
+  }
+  return isEditing.value ? '编辑项目' : '添加项目'
+})
+
+const footerPrimaryLabel = computed(() => {
+  if (isGroupMode.value) {
+    return `批量导入 (${selectedGroupProjects.value.length})`
+  }
+  return isEditing.value ? '保存修改' : '添加项目'
+})
 
 const groupedProjects = computed(() => {
   const groups: Record<string, Project[]> = {}
@@ -568,15 +600,22 @@ const showAddModal = async () => {
   autoFilled.value = false
   isGroupMode.value = false
   parsingUrl.value = false
+  selectedWebhookIds.value = []
+  singleProjectWebhookId.value = null
   // 加载可用的webhooks，为批量导入做准备
   await loadWebhooks()
   projectModalVisible.value = true
 }
 
-const editProject = (project: Project) => {
+const editProject = async (project: Project) => {
   Object.assign(currentProject, project)
   isEditing.value = true
-  autoFilled.value = false
+  isGroupMode.value = false
+  parsingUrl.value = false
+  urlParsed.value = true
+  autoFilled.value = true
+  selectedWebhookIds.value = project.webhooks?.map(w => w.id) || []
+  await loadWebhooks()
   projectModalVisible.value = true
 }
 
@@ -636,12 +675,17 @@ const parseProjectUrl = async () => {
 }
 
 const saveProject = async () => {
-  if (!ensureGitLabToken()) return
+  if (!isEditing.value && !ensureGitLabToken()) return
 
   submitting.value = true
   try {
     if (isEditing.value && currentProject.id) {
-      await projectsApi.updateProject(currentProject.id, currentProject)
+      await projectsApi.updateProject(currentProject.id, {
+        name: currentProject.name,
+        url: currentProject.url,
+        description: currentProject.description,
+        webhook_ids: selectedWebhookIds.value
+      })
     } else {
       // 创建项目，包含webhook_id（如果选择了）
       const projectData = {
@@ -668,42 +712,6 @@ const deleteProject = async (projectId: number) => {
     await loadProjects()
   } catch (error) {
     // 错误已在 API 客户端处理
-  }
-}
-
-const manageWebhooks = async (project: Project) => {
-  managingProject.value = project
-  selectedWebhookIds.value = project.webhooks?.map(w => w.id) || []
-  await loadWebhooks()
-  webhookModalVisible.value = true
-}
-
-const saveProjectWebhooks = async () => {
-  if (!managingProject.value) return
-  
-  submitting.value = true
-  try {
-    // 先清除所有关联
-    const currentWebhookIds = managingProject.value.webhooks?.map(w => w.id) || []
-    for (const webhookId of currentWebhookIds) {
-      await projectsApi.deleteProjectWebhook(managingProject.value.id, webhookId)
-    }
-    
-    // 添加新的关联
-    for (const webhookId of selectedWebhookIds.value) {
-      await projectsApi.createProjectWebhook({
-        project_id: managingProject.value.id,
-        webhook_id: webhookId
-      })
-    }
-    
-    ElMessage.success('Webhook关联更新成功')
-    webhookModalVisible.value = false
-    await loadProjects()
-  } catch (error) {
-    // 错误已在 API 客户端处理
-  } finally {
-    submitting.value = false
   }
 }
 
@@ -755,13 +763,31 @@ const batchCheckWebhookStatus = async () => {
   }
 }
 
+const setWebhookSelection = (webhookId: number, checked: boolean) => {
+  const index = selectedWebhookIds.value.indexOf(webhookId)
+  if (checked) {
+    if (index === -1) {
+      selectedWebhookIds.value.push(webhookId)
+    }
+  } else {
+    if (index > -1) {
+      selectedWebhookIds.value.splice(index, 1)
+    }
+  }
+}
+
 const toggleWebhook = (webhookId: number) => {
   const index = selectedWebhookIds.value.indexOf(webhookId)
-  if (index > -1) {
-    selectedWebhookIds.value.splice(index, 1)
-  } else {
-    selectedWebhookIds.value.push(webhookId)
-  }
+  setWebhookSelection(webhookId, index === -1)
+}
+
+const selectAllWebhooks = () => {
+  if (availableWebhooks.value.length === 0) return
+  selectedWebhookIds.value = availableWebhooks.value.map(webhook => webhook.id)
+}
+
+const clearWebhookSelection = () => {
+  selectedWebhookIds.value = []
 }
 
 const formatWebhookUrl = (url: string) => {
@@ -779,7 +805,6 @@ const formatWebhookUrl = (url: string) => {
 }
 
 const goToWebhooks = () => {
-  webhookModalVisible.value = false
   router.push('/webhooks')
 }
 
@@ -871,6 +896,7 @@ const handleDialogClose = () => {
   webhookConfig.webhookId = null
   singleProjectWebhookId.value = null
   isEditing.value = false
+  selectedWebhookIds.value = []
 }
 
 onMounted(() => {
@@ -1261,130 +1287,127 @@ onMounted(() => {
   }
 }
 
-// Webhook管理对话框样式
-.webhook-manage-dialog {
-  .project-info-section {
-    margin-bottom: 24px;
-    padding: 20px;
-    background: linear-gradient(135deg, #f5f8ff 0%, #f0f4ff 100%);
-    border-radius: 10px;
-    border: 1px solid #e6e8eb;
-    
-    .project-label {
-      font-size: 13px;
-      color: #909399;
-      font-weight: 500;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-    
-    .project-details {
-      .project-name {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 20px;
-        font-weight: 600;
-        color: #303133;
-        margin-bottom: 6px;
-        
-        .el-icon {
-          font-size: 24px;
-          color: #409eff;
-        }
-      }
-      
-      .project-url {
-        font-size: 13px;
-        color: #606266;
-        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
-        padding-left: 34px;
-      }
-    }
-  }
-  
-  .webhook-selection {
-    .section-title {
+// Webhook 配置卡片样式
+.edit-project-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.webhook-management-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 10px;
+  padding: 16px 18px;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    .title {
       font-size: 16px;
       font-weight: 600;
       color: #303133;
-      margin-bottom: 16px;
-      padding-left: 4px;
-      border-left: 3px solid #409eff;
-      padding-left: 12px;
     }
-    
-    .webhook-list {
+
+    .actions {
       display: flex;
-      flex-direction: column;
+      align-items: center;
       gap: 12px;
-      
-      .webhook-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 16px;
-        border: 1px solid #e6e8eb;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.3s;
-        position: relative;
-        
-        &:hover {
-          border-color: #409eff;
-          background: #f8f9fb;
-          box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
-        }
-        
-        &.selected {
-          border-color: #409eff;
-          background: #ecf5ff;
-          box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
-        }
-        
-        .webhook-checkbox {
-          margin-top: 2px;
-        }
-        
-        .webhook-content {
-          flex: 1;
-          
-          .webhook-main {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 6px;
-            
-            .webhook-icon {
-              font-size: 18px;
-              color: #409eff;
-            }
-            
-            .webhook-name {
-              font-size: 15px;
-              font-weight: 500;
-              color: #303133;
-            }
-          }
-          
-          .webhook-url {
-            font-size: 12px;
-            color: #909399;
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
-            word-break: break-all;
-            line-height: 1.4;
-            padding-left: 26px;
-          }
-        }
-        
-        .selected-tag {
-          position: absolute;
-          top: 16px;
-          right: 16px;
-        }
+
+      .el-button {
+        padding: 0 6px;
       }
     }
+  }
+}
+
+.webhook-selection {
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #303133;
+    margin-bottom: 16px;
+    padding-left: 4px;
+    border-left: 3px solid #409eff;
+    padding-left: 12px;
+  }
+}
+
+.webhook-management-card .webhook-list,
+.webhook-selection .webhook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.webhook-management-card .webhook-item,
+.webhook-selection .webhook-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+
+  &:hover {
+    border-color: #409eff;
+    background: #f8f9fb;
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  }
+
+  &.selected {
+    border-color: #409eff;
+    background: #ecf5ff;
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  }
+
+  .webhook-checkbox {
+    margin-top: 2px;
+  }
+
+  .webhook-content {
+    flex: 1;
+
+    .webhook-main {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+
+      .webhook-icon {
+        font-size: 18px;
+        color: #409eff;
+      }
+
+      .webhook-name {
+        font-size: 15px;
+        font-weight: 500;
+        color: #303133;
+      }
+    }
+
+    .webhook-url {
+      font-size: 12px;
+      color: #909399;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+      word-break: break-all;
+      line-height: 1.4;
+      padding-left: 26px;
+    }
+  }
+
+  .selected-tag {
+    position: absolute;
+    top: 16px;
+    right: 16px;
   }
 }
 

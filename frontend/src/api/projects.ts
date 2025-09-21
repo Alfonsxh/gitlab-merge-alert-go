@@ -12,6 +12,10 @@ export interface Project {
   webhooks?: any[]
 }
 
+export interface ProjectUpdatePayload extends Partial<Project> {
+  webhook_ids?: number[]
+}
+
 export const projectsApi = {
   getProjects(params?: { page?: number; page_size?: number }) {
     return apiClient.get<any, { data: Project[]; total: number }>('/projects', { params })
@@ -21,7 +25,7 @@ export const projectsApi = {
     return apiClient.post<any, { data: Project }>('/projects', project)
   },
 
-  updateProject(id: number, project: Partial<Project>) {
+  updateProject(id: number, project: ProjectUpdatePayload) {
     return apiClient.put<any, { data: Project }>(`/projects/${id}`, project)
   },
 
