@@ -137,11 +137,13 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 			{
 				projects.GET("", h.GetProjects)
 				projects.POST("", h.CreateProject)
-				projects.PUT("/:id", h.UpdateProject).Use(h.GetOwnershipChecker().CheckProjectOwnership())
-				projects.DELETE("/:id", h.DeleteProject).Use(h.GetOwnershipChecker().CheckProjectOwnership())
+				// 具体路由放在参数路由之前，避免路由匹配错误
 				projects.POST("/parse-url", h.ParseProjectURL)
 				projects.POST("/scan-group", h.ScanGroupProjects)
 				projects.POST("/batch-create", h.BatchCreateProjects)
+				// 参数路由放在最后
+				projects.PUT("/:id", h.GetOwnershipChecker().CheckProjectOwnership(), h.UpdateProject)
+				projects.DELETE("/:id", h.GetOwnershipChecker().CheckProjectOwnership(), h.DeleteProject)
 
 				// GitLab Webhook管理API
 				projects.POST("/:id/sync-gitlab-webhook", h.SyncGitLabWebhook).Use(h.GetOwnershipChecker().CheckProjectOwnership())
