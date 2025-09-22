@@ -120,9 +120,9 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-        if: ${{ secrets.DOCKER_USERNAME != '' }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
 
       - name: Extract metadata
         id: meta
@@ -130,7 +130,7 @@ jobs:
         with:
           images: |
             ghcr.io/${{ github.repository }}
-            ${{ secrets.DOCKER_USERNAME != '' && format('{0}/gitlab-merge-alert-go', secrets.DOCKER_USERNAME) || '' }}
+            ${{ secrets.DOCKERHUB_USERNAME != '' && format('{0}/gitlab-merge-alert-go', secrets.DOCKERHUB_USERNAME) || '' }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr

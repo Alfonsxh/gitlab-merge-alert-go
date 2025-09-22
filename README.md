@@ -10,6 +10,77 @@
 - **集中化管理**：后台可维护 GitLab 项目、企业微信 Webhook、用户邮箱与手机号映射以及项目与 Webhook 的关联关系。
 - **可观测性**：内置通知记录、概览指标以及项目 / Webhook 日统计，便于追踪推送效果。
 
+## 核心架构
+
+```mermaid
+flowchart TB
+    subgraph GitLab["GitLab Server"]
+        MR[Merge Request Event]
+    end
+
+    subgraph Service["GitLab Merge Alert Service"]
+        direction TB
+
+        subgraph API["API Layer"]
+            Webhook[Webhook Receiver<br/>/api/webhook/:key]
+            Auth[Auth API<br/>/api/auth/*]
+            Admin[Admin API<br/>/api/admin/*]
+        end
+
+        subgraph Core["Core Logic"]
+            Parser[Event Parser<br/>解析 MR 事件]
+            Mapper[User Mapper<br/>邮箱→手机号映射]
+            Builder[Message Builder<br/>构建企业微信消息]
+            Sender[Notification Sender<br/>发送通知]
+        end
+
+        subgraph Data["Data Layer"]
+            DB[(SQLite DB)]
+            Projects[Projects<br/>GitLab 项目]
+            Webhooks[Webhooks<br/>企业微信机器人]
+            Users[Users<br/>用户映射]
+            Mappings[Mappings<br/>项目-Webhook 关联]
+            Logs[Notification Logs<br/>通知记录]
+        end
+    end
+
+    subgraph WeChat["企业微信"]
+        Robot[机器人<br/>接收并展示消息]
+        Member[团队成员<br/>@ 提醒]
+    end
+
+    MR -->|POST| Webhook
+    Webhook --> Parser
+    Parser --> Mapper
+    Mapper -.->|查询| Users
+    Parser -.->|查询| Projects
+    Projects -.->|关联| Mappings
+    Mappings -.->|获取| Webhooks
+    Mapper --> Builder
+    Builder --> Sender
+    Sender -->|推送| Robot
+    Robot -->|@| Member
+    Sender -.->|记录| Logs
+
+    Admin -.->|管理| Projects
+    Admin -.->|管理| Webhooks
+    Admin -.->|管理| Users
+    Admin -.->|管理| Mappings
+
+    Auth -.->|认证| Admin
+```
+
+### 数据流说明
+
+1. **事件接收**：GitLab 通过 Webhook 推送 Merge Request 事件到服务
+2. **事件处理**：
+   - 解析 MR 事件数据（标题、描述、作者、指派人等）
+   - 查询项目配置，获取对应的企业微信 Webhook
+   - 通过邮箱或用户名查找手机号，用于 @ 提醒
+3. **消息构建**：根据事件类型（打开/更新/合并/关闭）生成不同的消息模板
+4. **通知发送**：调用企业微信机器人 API 发送 Markdown 格式消息
+5. **记录存储**：所有通知记录保存到数据库，支持后续查询和统计
+
 ## Docker 快速部署
 
 ```bash
