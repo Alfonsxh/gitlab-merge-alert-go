@@ -45,8 +45,8 @@ flowchart TB
     end
 
     subgraph WeChat["企业微信"]
-        Robot[机器人<br/>接收并展示消息]
-        Member[团队成员<br/>@ 提醒]
+        Robot["机器人<br/>接收并展示消息"]
+        Member["团队成员<br/>@提醒"]
     end
 
     MR -->|POST| Webhook
@@ -59,7 +59,7 @@ flowchart TB
     Mapper --> Builder
     Builder --> Sender
     Sender -->|推送| Robot
-    Robot -->|@| Member
+    Robot -->|"@"| Member
     Sender -.->|记录| Logs
 
     Admin -.->|管理| Projects
