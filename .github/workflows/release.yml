@@ -34,40 +34,53 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
+      - name: Copy frontend dist to backend
+        run: cp -r ./frontend/dist ./backend/internal/web/frontend_dist
+
       - name: Build Go binary for Linux AMD64
+        working-directory: ./backend
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -tags embed \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
-            -o gitlab-merge-alert-linux-amd64 \
-            ./backend/cmd/main.go
+            -o ../gitlab-merge-alert-linux-amd64 \
+            ./cmd/main.go
 
       - name: Build Go binary for Linux ARM64
+        working-directory: ./backend
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+            -tags embed \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
-            -o gitlab-merge-alert-linux-arm64 \
-            ./backend/cmd/main.go
+            -o ../gitlab-merge-alert-linux-arm64 \
+            ./cmd/main.go
 
       - name: Build Go binary for Darwin AMD64
+        working-directory: ./backend
         run: |
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
+            -tags embed \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
-            -o gitlab-merge-alert-darwin-amd64 \
-            ./backend/cmd/main.go
+            -o ../gitlab-merge-alert-darwin-amd64 \
+            ./cmd/main.go
 
       - name: Build Go binary for Darwin ARM64
+        working-directory: ./backend
         run: |
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build \
+            -tags embed \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
-            -o gitlab-merge-alert-darwin-arm64 \
-            ./backend/cmd/main.go
+            -o ../gitlab-merge-alert-darwin-arm64 \
+            ./cmd/main.go
 
       - name: Build Go binary for Windows AMD64
+        working-directory: ./backend
         run: |
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
+            -tags embed \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
-            -o gitlab-merge-alert-windows-amd64.exe \
-            ./backend/cmd/main.go
+            -o ../gitlab-merge-alert-windows-amd64.exe \
+            ./cmd/main.go
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
