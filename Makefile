@@ -1,32 +1,57 @@
-.PHONY: build run test clean docker-build docker-run migrate migrate-status migrate-rollback frontend-install frontend-dev frontend-build
-
 # 应用名称
-APP_NAME=gitlab-merge-alert-go
+APP_NAME := gitlab-merge-alert-go
+BIN_DIR := bin
+FRONTEND_DIR := frontend
+BACKEND_DIR := backend
+FRONTEND_DIST := $(BACKEND_DIR)/internal/web/frontend_dist
 
-# 构建应用
-build: frontend-build
+# 默认目标
+.DEFAULT_GOAL := build
+
+# 伪目标声明
+.PHONY: build run clean install \
+	frontend frontend-install \
+	backend-install \
+	docker-build-x86
+
+# 前端构建
+frontend: frontend-install
+	@echo "Building frontend..."
+	cd $(FRONTEND_DIR) && npm run build
+	@echo "Copying frontend dist to backend for embedding..."
+	rm -rf $(FRONTEND_DIST)
+	cp -r $(FRONTEND_DIR)/dist $(FRONTEND_DIST)
+	@echo "Frontend build complete"
+
+frontend-install:
+	cd $(FRONTEND_DIR) && npm install
+
+backend-install:
+	cd $(BACKEND_DIR) && go mod tidy && go mod vendor
+
+# 安装依赖
+install: frontend-install backend-install
+	@echo "All dependencies installed"
+
+# 主构建目标
+build: frontend
 	@echo "Building backend with embedded frontend for linux/amd64..."
-	cd backend && GOOS=linux GOARCH=amd64 go build -tags embed -o ../bin/$(APP_NAME) ./cmd/main.go
+	cd $(BACKEND_DIR) && GOOS=linux GOARCH=amd64 go build -tags embed -o ../$(BIN_DIR)/$(APP_NAME) ./cmd/main.go
 	@echo "Cleaning up temporary frontend files..."
-	rm -rf backend/internal/web/frontend_dist
-	@echo "Build complete: bin/$(APP_NAME)"
+	rm -rf $(FRONTEND_DIST)
+	@echo "Build complete: $(BIN_DIR)/$(APP_NAME)"
 
-# 运行应用（后端）
+# 运行应用
 run:
-	cd backend && go run ./cmd/main.go
+	cd $(BACKEND_DIR) && go run ./cmd/main.go
 
-# 构建x86_64架构的Docker镜像
+# Docker构建
 docker-build-x86:
 	docker build --platform linux/amd64 -t $(APP_NAME):x86_64 .
 
-# 前端相关命令
-frontend-install:
-	cd frontend && npm install
-
-frontend-build:
-	@echo "Building frontend..."
-	cd frontend && npm install && npm run build
-	@echo "Frontend build complete"
-	@echo "Copying frontend dist to backend for embedding..."
-	rm -rf backend/internal/web/frontend_dist
-	cp -r frontend/dist backend/internal/web/frontend_dist
+# 清理目标
+clean:
+	@echo "Cleaning build artifacts..."
+	rm -rf $(BIN_DIR)/$(APP_NAME)
+	rm -rf $(FRONTEND_DIST)
+	@echo "Clean complete"
