@@ -73,7 +73,7 @@ func (h *Handler) GetProjects(c *gin.Context) {
 		return
 	}
 
-	// 实时同步 GitLab Webhook 状态（若凭证可用）
+	// 始终实时同步 GitLab Webhook 状态（若凭证可用）
 	var (
 		gitlabToken string
 		webhookURL  string
@@ -92,6 +92,118 @@ func (h *Handler) GetProjects(c *gin.Context) {
 		}
 	}
 
+	// 并发刷新 GitLab webhook 状态
+	if gitlabToken != "" && webhookURL != "" && len(projects) > 0 {
+		// 使用 channel 和 goroutines 并发获取状态
+		type webhookStatusResult struct {
+			projectID     uint
+			webhookSynced bool
+			webhookID     *int
+		}
+
+		statusChan := make(chan webhookStatusResult, len(projects))
+		var wg sync.WaitGroup
+
+		// 限制并发数为50，提高并发度以加快响应速度
+		semaphore := make(chan struct{}, 50)
+
+		for idx := range projects {
+			project := &projects[idx]
+			wg.Add(1)
+			go func(p *models.Project) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+
+				parsed := h.gitlabService.ParseGitLabURL(p.URL)
+				if !parsed.IsValid {
+					logger.GetLogger().Debugf("Skip invalid URL for project %d: %s", p.ID, p.URL)
+					return
+				}
+
+				existingWebhook, err := h.gitlabService.FindWebhookByURL(
+					parsed.BaseURL, p.GitLabProjectID, webhookURL, gitlabToken)
+				if err != nil {
+					logger.GetLogger().Debugf("Failed to check webhook for project %d: %v", p.ID, err)
+					// 即使查询失败，也返回当前数据库中的状态
+					statusChan <- webhookStatusResult{
+						projectID:     p.ID,
+						webhookSynced: p.WebhookSynced,
+						webhookID:     p.GitLabWebhookID,
+					}
+					return
+				}
+
+				result := webhookStatusResult{
+					projectID:     p.ID,
+					webhookSynced: existingWebhook != nil,
+				}
+				if existingWebhook != nil {
+					result.webhookID = &existingWebhook.ID
+				}
+				statusChan <- result
+			}(project)
+		}
+
+		// 等待所有goroutine完成
+		go func() {
+			wg.Wait()
+			close(statusChan)
+		}()
+
+		// 收集结果并更新项目状态
+		statusMap := make(map[uint]webhookStatusResult)
+		for result := range statusChan {
+			statusMap[result.projectID] = result
+		}
+
+		// 更新内存中的项目状态并批量更新数据库
+		now := time.Now()
+		var updateBatch []map[string]interface{}
+
+		for idx := range projects {
+			project := &projects[idx]
+			if status, ok := statusMap[project.ID]; ok {
+				// 检查状态是否发生变化
+				if project.WebhookSynced != status.webhookSynced ||
+					(project.GitLabWebhookID == nil && status.webhookID != nil) ||
+					(project.GitLabWebhookID != nil && status.webhookID == nil) ||
+					(project.GitLabWebhookID != nil && status.webhookID != nil && *project.GitLabWebhookID != *status.webhookID) {
+
+					// 更新内存中的状态
+					project.WebhookSynced = status.webhookSynced
+					project.GitLabWebhookID = status.webhookID
+					project.LastSyncAt = &now
+
+					// 准备批量更新数据
+					updateData := map[string]interface{}{
+						"id":                project.ID,
+						"webhook_synced":    status.webhookSynced,
+						"gitlab_webhook_id": status.webhookID,
+						"last_sync_at":      now,
+					}
+					updateBatch = append(updateBatch, updateData)
+				}
+			}
+		}
+
+		// 异步批量更新数据库
+		if len(updateBatch) > 0 {
+			go func(updates []map[string]interface{}) {
+				for _, update := range updates {
+					projectID := update["id"].(uint)
+					delete(update, "id")
+					if err := h.db.Model(&models.Project{}).Where("id = ?", projectID).Updates(update).Error; err != nil {
+						logger.GetLogger().Warnf("Failed to update webhook status for project %d: %v", projectID, err)
+					}
+				}
+				if len(updates) > 0 {
+					logger.GetLogger().Infof("Updated webhook status for %d projects", len(updates))
+				}
+			}(updateBatch)
+		}
+	}
+
 	// 转换为响应格式
 	responses := make([]models.ProjectResponse, 0) // 确保是空数组而不是nil
 	for idx := range projects {
@@ -100,11 +212,6 @@ func (h *Handler) GetProjects(c *gin.Context) {
 		// 去重返回的关联数据，避免历史重复记录导致的视觉噪音
 		if len(project.Webhooks) > 1 {
 			project.Webhooks = dedupeProjectWebhooks(project.Webhooks)
-		}
-
-		// 实时刷新 GitLab webhook 状态
-		if gitlabToken != "" && webhookURL != "" {
-			h.refreshProjectWebhookStatus(project, gitlabToken, webhookURL)
 		}
 
 		response := models.ProjectResponse{

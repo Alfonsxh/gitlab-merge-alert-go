@@ -32,11 +32,11 @@
     </el-alert>
 
     <el-card>
-      <el-empty v-if="projects.length === 0" description="还没有添加任何项目" class="empty-container">
+      <el-empty v-if="projects.length === 0 && !loading" description="还没有添加任何项目" class="empty-container">
         <el-button type="primary" @click="showAddModal">开始添加项目</el-button>
       </el-empty>
-      
-      <div v-else>
+
+      <div v-else-if="!loading">
         <el-alert 
           title=""
           type="info" 
@@ -148,6 +148,12 @@
             </el-table>
           </el-collapse-item>
         </el-collapse>
+      </div>
+
+      <!-- 加载状态显示 -->
+      <div v-if="loading" class="loading-container">
+        <el-icon class="is-loading" :size="32"><Loading /></el-icon>
+        <p style="margin-top: 16px; color: #909399;">正在同步项目状态，请稍候...</p>
       </div>
     </el-card>
     
@@ -434,7 +440,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, h } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -560,16 +566,33 @@ const groupedProjects = computed(() => {
 
 const loadProjects = async () => {
   loading.value = true
+
+  // 添加加载提示，告知用户正在获取实时数据
+  const loadingMessage = ElMessage({
+    message: '正在获取项目实时状态...',
+    type: 'info',
+    duration: 0, // 不自动关闭
+    icon: h('i', { class: 'el-icon-loading' })
+  })
+
   try {
     const res = await projectsApi.getProjects()
     projects.value = res.data || []
-    
+
     // 默认展开第一个组
     const firstGroup = Object.keys(groupedProjects.value)[0]
     if (firstGroup && activeGroups.value.length === 0) {
       activeGroups.value = [firstGroup]
     }
+
+    // 成功后关闭加载提示
+    loadingMessage.close()
+    ElMessage.success({
+      message: '项目状态已更新',
+      duration: 1500
+    })
   } catch (error) {
+    loadingMessage.close()
     // 错误已在 API 客户端处理
   } finally {
     loading.value = false
@@ -941,6 +964,28 @@ onMounted(() => {
 
 .mb-3 {
   margin-bottom: 12px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+
+  .is-loading {
+    animation: rotating 2s linear infinite;
+    color: #409eff;
+  }
+}
+
+@keyframes rotating {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .mt-3 {
