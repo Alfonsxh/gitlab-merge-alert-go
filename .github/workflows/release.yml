@@ -121,7 +121,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-        continue-on-error: true
+        if: ${{ secrets.DOCKER_USERNAME != '' }}
 
       - name: Extract metadata
         id: meta
@@ -129,6 +129,7 @@ jobs:
         with:
           images: |
             ghcr.io/${{ github.repository }}
+            ${{ secrets.DOCKER_USERNAME != '' && format('{0}/gitlab-merge-alert-go', secrets.DOCKER_USERNAME) || '' }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
