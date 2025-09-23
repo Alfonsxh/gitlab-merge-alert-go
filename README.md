@@ -2,12 +2,14 @@
 
 ![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8?logo=go) ![License](https://img.shields.io/badge/license-MIT-green)
 
-> 将 GitLab Merge Request Webhook 转化为企业微信通知的一站式服务，内置管理后台与权限体系，部署后即可投入团队协作流程。
+> 将 GitLab Merge Request Webhook 转化为企业微信群通知的一站式服务，提交 MR 时立即通知审核人。
+> 内置管理后台与权限体系，部署后即可投入团队协作流程。
 
 ## 主要功能
 
 - **Webhook 到通知**：接收 GitLab Merge Request 事件，按项目推送到绑定的企业微信机器人，并支持按手机号 @ 指派人。
 - **集中化管理**：后台可维护 GitLab 项目、企业微信 Webhook、用户邮箱与手机号映射以及项目与 Webhook 的关联关系。
+- **部署极简**：除了在 GitLab 申请一个 Access Token，其他所有配置和操作都在本服务内完成，无需额外依赖。
 - **批量项目添加**：支持一键添加 GitLab 组下的所有子项目，快速完成团队项目配置，无需逐个手动添加。
 - **可观测性**：内置通知记录、概览指标以及项目 / Webhook 日统计，便于追踪推送效果。
 
