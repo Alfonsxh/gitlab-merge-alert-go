@@ -1,9 +1,13 @@
-# GitLab Merge Alert
+# GitLab Merge Alert - GitLab MR to WeChat Work Notification
 
 ![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8?logo=go) ![License](https://img.shields.io/badge/license-MIT-green)
 
+> 🔔 GitLab Merge Request to WeChat Work (企业微信) notification service. Instantly notify reviewers when MR is created or updated.
+>
 > 将 GitLab Merge Request Webhook 转化为企业微信群通知的一站式服务，提交 MR 时立即通知审核人。
 > 内置管理后台与权限体系，部署后即可投入团队协作流程。
+
+**Keywords**: GitLab, Merge Request, MR, WeChat Work, 企业微信, Webhook, Notification, Alert, GitLab Integration, Code Review
 
 ## 主要功能
 
