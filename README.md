@@ -112,8 +112,8 @@ graph LR
     B --> C{Route by Project}
     C --> D[WeChat Work Robot 1]
     C --> E[WeChat Work Robot 2]
-    D --> F[@mention Reviewers]
-    E --> G[@mention Reviewers]
+    D --> F[Mention Reviewers]
+    E --> G[Mention Reviewers]
 ```
 
 1. **GitLab** sends merge request events via webhook
