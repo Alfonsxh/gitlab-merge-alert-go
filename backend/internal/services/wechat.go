@@ -67,7 +67,13 @@ func (s *weChatService) SendMessage(webhookURL, content string, mentionedMobiles
 }
 
 func (s *weChatService) FormatMergeRequestMessage(projectName, sourceBranch, targetBranch, mergeFrom, mergeTitle, clickURL string, mergeToList []string) string {
-	content := fmt.Sprintf("%s\nProject: %s\nFrom: %s(%s)\nTo: %s\nMerge Info -> %s\nClick -> %s",
+
+	content := fmt.Sprintf(`%s
+Project: %s
+   From: %s(%s)
+     To: %s
+MR Info: %s
+Click -> %s`,
 		strings.Repeat("=", 32)+" Merge Request "+strings.Repeat("=", 32),
 		projectName,
 		sourceBranch,
@@ -76,6 +82,15 @@ func (s *weChatService) FormatMergeRequestMessage(projectName, sourceBranch, tar
 		mergeTitle,
 		clickURL,
 	)
+
+	// 添加 @ 提醒
+	if len(mergeToList) > 0 {
+		mentions := ""
+		for _, person := range mergeToList {
+			mentions += fmt.Sprintf(" @%s", person)
+		}
+		content += "\n" + mentions
+	}
 
 	return content
 }
