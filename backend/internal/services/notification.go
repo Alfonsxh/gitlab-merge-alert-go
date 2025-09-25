@@ -43,21 +43,32 @@ func (s *notificationService) ProcessMergeRequest(webhookData *models.GitLabWebh
 	assigneeInfo := make([]models.AssigneeInfo, len(webhookData.Assignees))
 	assigneeEmails := make([]string, len(webhookData.Assignees))
 	for i, assignee := range webhookData.Assignees {
+		// 当邮箱被脱敏时，使用 name 字段
+		email := assignee.Email
+		if email == "[REDACTED]" {
+			email = assignee.Name
+		}
 		assigneeInfo[i] = models.AssigneeInfo{
-			Email:    assignee.Email,
+			Email:    email,
 			Username: assignee.Username,
 		}
-		assigneeEmails[i] = assignee.Email
+		assigneeEmails[i] = email
 	}
 
 	// 记录通知
+	// 当邮箱被脱敏时，使用 name 字段
+	authorEmail := webhookData.User.Email
+	if authorEmail == "[REDACTED]" {
+		authorEmail = webhookData.User.Name
+	}
+
 	notification := &models.Notification{
 		ProjectID:      project.ID,
-		MergeRequestID: webhookData.ObjectAttributes.ID,
+		MergeRequestID: webhookData.ObjectAttributes.IID,
 		Title:          webhookData.ObjectAttributes.Title,
 		SourceBranch:   webhookData.ObjectAttributes.SourceBranch,
 		TargetBranch:   webhookData.ObjectAttributes.TargetBranch,
-		AuthorEmail:    webhookData.User.Email,
+		AuthorEmail:    authorEmail,
 		Status:         webhookData.ObjectAttributes.State,
 		// 不再设置 OwnerID，通知通过项目权限控制
 	}
@@ -221,7 +232,9 @@ func (s *notificationService) GetAllNotifications() ([]models.NotificationRespon
 		// 解析邮箱数组
 		var assigneeEmails []string
 		if notification.AssigneeEmails != "" {
-			json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails)
+			if err := json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails); err != nil {
+				logger.GetLogger().Warnf("Failed to unmarshal assignee emails: %v, raw: %s", err, notification.AssigneeEmails)
+			}
 		}
 
 		responses = append(responses, models.NotificationResponse{
@@ -256,7 +269,9 @@ func (s *notificationService) GetNotificationsByProjectID(projectID uint) ([]mod
 		// 解析邮箱数组
 		var assigneeEmails []string
 		if notification.AssigneeEmails != "" {
-			json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails)
+			if err := json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails); err != nil {
+				logger.GetLogger().Warnf("Failed to unmarshal assignee emails: %v, raw: %s", err, notification.AssigneeEmails)
+			}
 		}
 
 		responses = append(responses, models.NotificationResponse{
@@ -291,7 +306,9 @@ func (s *notificationService) GetRecentNotifications(limit int) ([]models.Notifi
 		// 解析邮箱数组
 		var assigneeEmails []string
 		if notification.AssigneeEmails != "" {
-			json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails)
+			if err := json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails); err != nil {
+				logger.GetLogger().Warnf("Failed to unmarshal assignee emails: %v, raw: %s", err, notification.AssigneeEmails)
+			}
 		}
 
 		responses = append(responses, models.NotificationResponse{

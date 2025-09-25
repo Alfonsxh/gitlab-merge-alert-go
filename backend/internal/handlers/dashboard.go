@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -71,9 +73,12 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 	responses := make([]models.NotificationResponse, 0) // 确保是空数组而不是nil
 	for _, notification := range notifications {
 		var assigneeEmails []string
-		// 简单解析JSON字符串，实际应该使用json.Unmarshal
+		// 解析JSON字符串为数组
 		if notification.AssigneeEmails != "" {
-			assigneeEmails = []string{notification.AssigneeEmails}
+			if err := json.Unmarshal([]byte(notification.AssigneeEmails), &assigneeEmails); err != nil {
+				// 解析失败时记录日志但继续处理
+				logger.GetLogger().Warnf("Failed to unmarshal assignee emails: %v, raw: %s", err, notification.AssigneeEmails)
+			}
 		}
 
 		responses = append(responses, models.NotificationResponse{

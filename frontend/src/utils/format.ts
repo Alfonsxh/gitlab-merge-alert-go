@@ -21,14 +21,22 @@ export function formatPhone(phone: string | null | undefined): string {
  * 从邮箱中提取用户名
  */
 export function extractNameFromEmail(email: string | null | undefined): string {
-  if (!email || email === 'REDACTED' || email.trim() === '') {
+  if (!email || email.trim() === '') {
     return '-'
   }
-  
-  if (email.includes('@')) {
-    const username = email.split('@')[0]
-    return username === 'REDACTED' ? '-' : username
+
+  // 使用 includes 判断是否包含 REDACTED
+  if (email.includes('REDACTED')) {
+    return '-'
   }
-  
-  return email === 'REDACTED' ? '-' : email
+
+  // 如果已经是名字格式（不含@），直接返回
+  if (!email.includes('@')) {
+    return email
+  }
+
+  // 从邮箱提取用户名
+  const username = email.split('@')[0]
+  // 再次检查提取出的用户名是否包含 REDACTED
+  return username.includes('REDACTED') ? '-' : username
 }

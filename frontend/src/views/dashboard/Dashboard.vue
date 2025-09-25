@@ -139,7 +139,7 @@
                 size="small"
                 stripe
               >
-                <el-table-column label="标题" prop="title" width="250">
+                <el-table-column label="标题" prop="title" min-width="200">
                   <template #default="{ row }">
                     <el-link
                       v-if="getMergeRequestUrl(row)"
@@ -153,7 +153,7 @@
                   </template>
                 </el-table-column>
                 
-                <el-table-column label="分支" width="200">
+                <el-table-column label="分支" min-width="180">
                   <template #default="{ row }">
                     <div class="branch-flow">
                       <el-tag size="small" type="danger">
@@ -169,13 +169,13 @@
                   </template>
                 </el-table-column>
                 
-                <el-table-column label="提交者" prop="author_email">
+                <el-table-column label="提交者" prop="author_email" min-width="120">
                   <template #default="{ row }">
                     {{ extractNameFromEmail(row.author_email) }}
                   </template>
                 </el-table-column>
                 
-                <el-table-column label="Merge者">
+                <el-table-column label="Merge者" min-width="150">
                   <template #default="{ row }">
                     <el-space v-if="row.assignee_emails?.length" wrap>
                       <el-tag
@@ -190,7 +190,7 @@
                   </template>
                 </el-table-column>
                 
-                <el-table-column label="状态" width="120">
+                <el-table-column label="状态" min-width="100">
                   <template #default="{ row }">
                     <div class="status-wrapper">
                       <el-tag 
@@ -214,7 +214,7 @@
                   </template>
                 </el-table-column>
                 
-                <el-table-column label="时间" prop="created_at" width="160">
+                <el-table-column label="时间" prop="created_at" min-width="140">
                   <template #default="{ row }">
                     {{ formatDate(row.created_at) }}
                   </template>
