@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"gitlab-merge-alert-go/pkg/logger"
 	"net/http"
 	"strings"
-
-	"gitlab-merge-alert-go/pkg/logger"
 )
 
 type weChatService struct {
@@ -70,15 +69,14 @@ func (s *weChatService) FormatMergeRequestMessage(projectName, sourceBranch, tar
 
 	content := fmt.Sprintf(`%s
 Project: %s
-   From: %s(%s)
-     To: %s
+   From: %s -> %s (%s)
 MR Info: %s
 Click -> %s`,
 		strings.Repeat("=", 32)+" Merge Request "+strings.Repeat("=", 32),
 		projectName,
 		sourceBranch,
-		mergeFrom,
 		targetBranch,
+		mergeFrom,
 		mergeTitle,
 		clickURL,
 	)
