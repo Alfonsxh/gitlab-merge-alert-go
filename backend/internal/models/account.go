@@ -40,9 +40,10 @@ type LoginResponse struct {
 }
 
 type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
-	Password string `json:"password" binding:"required,min=6"`
-	Email    string `json:"email" binding:"required,email"`
+	Username                  string `json:"username" binding:"required,min=3,max=50"`
+	Password                  string `json:"password" binding:"required,min=6"`
+	Email                     string `json:"email" binding:"required,email"`
+	GitLabPersonalAccessToken string `json:"gitlab_personal_access_token" binding:"required"`
 }
 
 type CreateAccountRequest struct {

@@ -100,10 +100,11 @@ docker run -d \
 ### 配置步骤
 
 1. 登录 **GitLab Merge Alert** Web 界面
-2. 在设置中配置 GitLab token
-3. 添加企业微信 webhook URL 到通知渠道
-4. 添加要监控的项目
-5. 系统将自动为每个项目配置 GitLab webhooks
+2. 注册普通用户时需填写 GitLab Personal Access Token（必须具备 `api`/`read_api`/`read_user` 权限，系统会实时校验并加密保存）
+3. 已有账号仍可在设置页更新 GitLab Token
+4. 添加企业微信 webhook URL 到通知渠道
+5. 添加要监控的项目
+6. 系统将自动为每个项目配置 GitLab webhooks
 
 ## 📊 工作原理
 

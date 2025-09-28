@@ -81,6 +81,7 @@ func setupRoutes(router *gin.Engine, h *handlers.Handler) {
 		{
 			system.GET("/bootstrap", h.GetBootstrapStatus)
 			system.POST("/setup-admin", h.SetupAdmin)
+			system.GET("/gitlab-config", h.GetGitLabConfig)
 		}
 
 		// 公开路由（无需认证）

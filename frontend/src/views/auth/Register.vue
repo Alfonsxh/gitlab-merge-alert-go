@@ -61,6 +61,23 @@
           />
         </div>
 
+        <div class="form-group">
+          <label for="gitlabToken" class="form-label">GitLab Token</label>
+          <input
+            id="gitlabToken"
+            v-model="registerForm.gitlabToken"
+            type="password"
+            class="form-control"
+            placeholder="请输入 GitLab Personal Access Token"
+            required
+            :disabled="loading"
+          />
+          <p class="token-hint">
+            <span class="token-hint__text">需具备 <code>api</code> / <code>read_api</code> / <code>read_user</code> 权限。</span>
+            <a class="token-hint__link" :href="gitlabPatLink" target="_blank" rel="noopener">前往生成 Personal Access Token</a>
+          </p>
+        </div>
+
         <button
           type="submit"
           class="btn btn-primary btn-block"
@@ -71,9 +88,9 @@
         </button>
       </form>
 
-      <div v-if="error" class="alert alert-danger mt-3">
+      <p v-if="error" class="error-banner">
         {{ error }}
-      </div>
+      </p>
 
       <p class="register-note">
         系统仅允许默认 admin 账号拥有管理员权限，注册后将创建普通用户。
@@ -88,38 +105,61 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { gitlabApi } from '@/api/gitlab'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const registerForm = ref({
-  username: '',
-  email: '',
-  password: '',
-  confirmPassword: ''
+	username: '',
+	email: '',
+	password: '',
+	confirmPassword: '',
+	gitlabToken: ''
 })
 
 const loading = ref(false)
 const error = ref('')
+const gitlabUrl = ref('')
+
+const gitlabPatLink = computed(() => {
+	const base = gitlabUrl.value?.replace(/\/$/, '')
+	return base ? `${base}/-/profile/personal_access_tokens` : 'https://gitlab.com/-/profile/personal_access_tokens'
+})
+
+	onMounted(async () => {
+		try {
+			const res = await gitlabApi.getPublicConfig()
+			gitlabUrl.value = res.data.gitlab_url
+		} catch (err) {
+			console.error('Failed to load GitLab config:', err)
+		}
+	})
 
 const handleRegister = async () => {
-  if (registerForm.value.password !== registerForm.value.confirmPassword) {
-    error.value = '两次输入的密码不一致'
-    return
-  }
+	if (registerForm.value.password !== registerForm.value.confirmPassword) {
+		error.value = '两次输入的密码不一致'
+		return
+	}
 
-  loading.value = true
-  error.value = ''
+	if (!registerForm.value.gitlabToken.trim()) {
+		error.value = 'GitLab Token 不能为空'
+		return
+	}
 
-  try {
-    await authStore.register({
-      username: registerForm.value.username.trim(),
-      email: registerForm.value.email.trim(),
-      password: registerForm.value.password
-    })
+	loading.value = true
+	error.value = ''
+
+	try {
+		await authStore.register({
+			username: registerForm.value.username.trim(),
+			email: registerForm.value.email.trim(),
+			password: registerForm.value.password,
+			gitlab_personal_access_token: registerForm.value.gitlabToken.trim()
+		})
 
     const redirect = (router.currentRoute.value.query.redirect as string) || '/'
     router.push(redirect)
@@ -205,6 +245,46 @@ const handleRegister = async () => {
 .form-control:disabled {
   background-color: #e9ecef;
   opacity: 1;
+}
+
+.token-hint {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
+  line-height: 1.5;
+}
+
+.token-hint__text {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.token-hint code {
+  background-color: #f5f5f5;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.token-hint__link {
+  display: inline-block;
+  color: #409eff;
+  text-decoration: none;
+}
+
+.token-hint__link:hover {
+  text-decoration: underline;
+}
+
+.error-banner {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: #fdecea;
+  color: #d93025;
+  border: 1px solid rgba(217, 48, 37, 0.35);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .btn {

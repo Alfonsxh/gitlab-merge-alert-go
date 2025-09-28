@@ -31,7 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const register = async (payload: { username: string; email: string; password: string }) => {
+  const register = async (payload: { username: string; email: string; password: string; gitlab_personal_access_token: string }) => {
     try {
       const response = await authAPI.register(payload)
       setAuthData(response)

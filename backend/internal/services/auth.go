@@ -4,12 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"gitlab-merge-alert-go/internal/models"
 	"gitlab-merge-alert-go/pkg/auth"
 	"gitlab-merge-alert-go/pkg/logger"
+	"gitlab-merge-alert-go/pkg/security"
 
 	"gorm.io/gorm"
 )
@@ -32,7 +34,7 @@ type AuthService interface {
 	RefreshToken(oldToken string) (*models.LoginResponse, error)
 	GetAccountByID(id uint) (*models.Account, error)
 	ChangePassword(accountID uint, oldPassword, newPassword string) error
-	RegisterUser(username, email, password string) (*models.LoginResponse, error)
+	RegisterUser(username, email, password, gitlabToken string) (*models.LoginResponse, error)
 	InitializeAdminAccount() error
 	IsAdminSetupRequired() (bool, error)
 	CompleteAdminSetup(token, email, password string) error
@@ -42,13 +44,15 @@ type authService struct {
 	db              *gorm.DB
 	jwtManager      *auth.JWTManager
 	passwordManager *auth.PasswordManager
+	encryptionKey   string
 }
 
-func NewAuthService(db *gorm.DB, jwtSecret string, jwtDuration time.Duration) AuthService {
+func NewAuthService(db *gorm.DB, jwtSecret string, jwtDuration time.Duration, encryptionKey string) AuthService {
 	return &authService{
 		db:              db,
 		jwtManager:      auth.NewJWTManager(jwtSecret, jwtDuration),
 		passwordManager: auth.NewPasswordManager(),
+		encryptionKey:   encryptionKey,
 	}
 }
 
@@ -155,11 +159,16 @@ func (s *authService) ChangePassword(accountID uint, oldPassword, newPassword st
 	return s.db.Save(account).Error
 }
 
-func (s *authService) RegisterUser(username, email, password string) (*models.LoginResponse, error) {
+func (s *authService) RegisterUser(username, email, password, gitlabToken string) (*models.LoginResponse, error) {
 	username = strings.TrimSpace(username)
 	email = strings.TrimSpace(email)
+	gitlabToken = strings.TrimSpace(gitlabToken)
 	if strings.EqualFold(username, "admin") {
 		return nil, ErrAdminLocked
+	}
+
+	if gitlabToken == "" {
+		return nil, fmt.Errorf("gitlab personal access token is required")
 	}
 
 	var count int64
@@ -182,6 +191,11 @@ func (s *authService) RegisterUser(username, email, password string) (*models.Lo
 		return nil, err
 	}
 
+	encryptedToken, err := security.Encrypt(s.encryptionKey, gitlabToken)
+	if err != nil {
+		return nil, err
+	}
+
 	now := time.Now()
 	account := &models.Account{
 		Username:              username,
@@ -191,6 +205,7 @@ func (s *authService) RegisterUser(username, email, password string) (*models.Lo
 		IsActive:              true,
 		ForcePasswordReset:    false,
 		PasswordInitializedAt: &now,
+		GitLabAccessToken:     encryptedToken,
 	}
 
 	if err := s.db.Create(account).Error; err != nil {

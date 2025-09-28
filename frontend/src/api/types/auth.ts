@@ -13,6 +13,7 @@ export interface RegisterRequest {
   username: string
   password: string
   email: string
+  gitlab_personal_access_token: string
 }
 
 export interface ChangePasswordRequest {

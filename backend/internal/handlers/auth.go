@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
@@ -18,7 +19,23 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.authService.RegisterUser(req.Username, req.Email, req.Password)
+	token := strings.TrimSpace(req.GitLabPersonalAccessToken)
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "GitLab personal access token is required"})
+		return
+	}
+
+	if err := h.gitlabService.TestConnection(h.config.GitLabURL, token); err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "连接失败") {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "GitLab 服务暂不可用: " + errMsg})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "GitLab Token 校验失败: " + errMsg})
+		return
+	}
+
+	resp, err := h.authService.RegisterUser(req.Username, req.Email, req.Password, token)
 	if err != nil {
 		switch err {
 		case services.ErrUsernameExists:

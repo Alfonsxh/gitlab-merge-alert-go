@@ -39,7 +39,7 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 		jwtDuration = 24 * time.Hour // 默认 24 小时
 	}
 
-	authService := services.NewAuthService(db, jwtSecret, jwtDuration)
+	authService := services.NewAuthService(db, jwtSecret, jwtDuration, cfg.EncryptionKey)
 	authMiddleware := middleware.NewAuthMiddleware(db, jwtSecret)
 	ownershipChecker := middleware.NewOwnershipChecker(db)
 

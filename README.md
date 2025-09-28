@@ -99,10 +99,11 @@ docker run -d \
 ### Configuration Steps
 
 1. Login to **GitLab Merge Alert** web interface
-2. Set up GitLab token in Settings
-3. Add WeChat Work webhook URL to notification channels
-4. Add projects to monitor
-5. The system will automatically configure GitLab webhooks for each project
+2. Register the first user时即填写 GitLab Personal Access Token（需具备 `api`/`read_api`/`read_user` 权限，系统会校验并加密存储）
+3. 若已有账户，仍可在 Settings 中更新 GitLab Token
+4. Add WeChat Work webhook URL to notification channels
+5. Add projects to monitor
+6. The system will automatically configure GitLab webhooks for each project
 
 ## 📊 How It Works
 

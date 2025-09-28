@@ -13,6 +13,10 @@ export const gitlabApi = {
     return apiClient.get<any, { data: GitLabConfig }>('/gitlab/config')
   },
 
+  getPublicConfig() {
+    return apiClient.get<any, { data: GitLabConfig }>('/system/gitlab-config')
+  },
+
   testToken(data: { access_token?: string; gitlab_url?: string }) {
     return apiClient.post('/gitlab/test-token', data)
   }
