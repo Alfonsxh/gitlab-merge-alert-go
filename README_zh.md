@@ -106,6 +106,35 @@ docker run -d \
 5. 添加要监控的项目
 6. 系统将自动为每个项目配置 GitLab webhooks
 
+### 多渠道 Webhook 支持
+
+GitLab Merge Alert 现原生支持企业微信、钉钉以及自定义 HTTP Webhook：
+
+- **企业微信**：沿用原生实现，支持手机号 @ 通知，适合中国大陆团队。
+- **钉钉**：在 Webhook 表单中选择“钉钉”类型，填写机器人加签 `Secret` 并配置关键词/安全策略；系统内置 20 次/分钟的令牌桶限流与月度配额统计，超过阈值会在通知记录中提示。
+- **自定义 Webhook**：选择“自定义”类型后，平台仅记录地址及 Header，消息需直接在 GitLab 配置同一地址触发，适合联动内部系统或第三方告警平台。
+
+> 默认开启自动识别：粘贴 URL 时会根据域名自动判定类型，仍可在对话框中手动切换。
+
+### 钉钉机器人配置要点
+
+1. 在钉钉开放平台创建自定义机器人，启用至少一种安全策略（关键词、加签或 IP 白名单）。
+2. 若启用加签，将生成的 `Secret` 填入 GitLab Merge Alert 表单，系统会自动拼接时间戳和签名。
+3. 可在“安全关键词”字段添加机器人配置的关键词，平台会在消息模板末尾附带提醒，避免发送失败。
+4. 如需调整限流或月度配额，可在配置文件/环境变量中覆盖：
+   - `notification.dingtalk.rate_limit_per_minute`（默认 20）
+   - `notification.dingtalk.monthly_quota`（默认 5000）
+   - `notification.dingtalk.request_timeout`、`notification.dingtalk.retry_attempts`
+
+### 查看与管理渠道配置
+
+Webhook 管理页面新增类型标签与动态表单：
+
+- 选择渠道后会显示特定的说明与校验（例如钉钉加签、关键词提示）。
+- 自定义渠道支持维护额外 Header，便于记录在 GitLab 需同步的请求头。
+- 项目与账户授权页面同步展示渠道类型，方便管理员快速识别通知路径。
+
+
 ## 📊 工作原理
 
 ```mermaid

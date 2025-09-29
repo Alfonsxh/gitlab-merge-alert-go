@@ -65,7 +65,7 @@ func (h *Handler) GetProjects(c *gin.Context) {
 	var projects []models.Project
 
 	// 应用所有权过滤
-	query := h.db.Preload("Webhooks")
+	query := h.db.Preload("Webhooks").Preload("Webhooks.Settings")
 	query = middleware.ApplyOwnershipFilter(c, query, "projects")
 
 	if err := query.Find(&projects).Error; err != nil {
@@ -228,16 +228,8 @@ func (h *Handler) GetProjects(c *gin.Context) {
 		}
 
 		// 转换关联的webhooks
-		for _, webhook := range project.Webhooks {
-			response.Webhooks = append(response.Webhooks, models.WebhookResponse{
-				ID:          webhook.ID,
-				Name:        webhook.Name,
-				URL:         webhook.URL,
-				Description: webhook.Description,
-				IsActive:    webhook.IsActive,
-				CreatedAt:   webhook.CreatedAt,
-				UpdatedAt:   webhook.UpdatedAt,
-			})
+		for idx := range project.Webhooks {
+			response.Webhooks = append(response.Webhooks, buildWebhookResponse(&project.Webhooks[idx]))
 		}
 
 		responses = append(responses, response)
@@ -438,7 +430,7 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	logger.GetLogger().Infof("Successfully updated project [ID: %d, Name: %s]", project.ID, project.Name)
 
 	// 重新加载项目以包含更新后的 Webhooks
-	if err := h.db.Preload("Webhooks").First(&project, id).Error; err != nil {
+	if err := h.db.Preload("Webhooks").Preload("Webhooks.Settings").First(&project, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found after update"})
 		return
 	}
@@ -457,16 +449,8 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	}
 
 	// 转换关联的webhooks
-	for _, webhook := range project.Webhooks {
-		response.Webhooks = append(response.Webhooks, models.WebhookResponse{
-			ID:          webhook.ID,
-			Name:        webhook.Name,
-			URL:         webhook.URL,
-			Description: webhook.Description,
-			IsActive:    webhook.IsActive,
-			CreatedAt:   webhook.CreatedAt,
-			UpdatedAt:   webhook.UpdatedAt,
-		})
+	for idx := range project.Webhooks {
+		response.Webhooks = append(response.Webhooks, buildWebhookResponse(&project.Webhooks[idx]))
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
@@ -1310,7 +1294,7 @@ func (h *Handler) BatchCheckWebhookStatus(c *gin.Context) {
 	var projects []models.Project
 
 	// 获取用户的所有项目
-	query := h.db.Preload("Webhooks")
+	query := h.db.Preload("Webhooks").Preload("Webhooks.Settings")
 	query = middleware.ApplyOwnershipFilter(c, query, "projects")
 
 	if err := query.Find(&projects).Error; err != nil {

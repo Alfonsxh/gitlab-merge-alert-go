@@ -7,205 +7,271 @@
         添加Webhook
       </el-button>
     </div>
-    
+
     <el-card>
       <div class="table-scroll-wrapper" ref="tableWrapperRef">
         <el-table
           :data="webhooks"
           v-loading="loading"
           stripe
-          style="min-width: 1000px; width: 100%;"
+          style="min-width: 1100px; width: 100%;"
         >
-        <el-table-column prop="id" label="ID" width="80" />
-        
-        <el-table-column prop="name" label="名称" min-width="200">
-          <template #default="{ row }">
-            <div class="webhook-name">
-              <el-icon><Connection /></el-icon>
-              <span>{{ row.name }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="url" label="URL" min-width="400">
-          <template #default="{ row }">
-            <div class="webhook-url">
-              <el-text class="url-text" truncated>{{ row.url }}</el-text>
-              <el-button
-                link
-                type="primary"
-                size="small"
-                @click="copyUrl(row.url)"
-              >
-                <el-icon><CopyDocument /></el-icon>
+          <el-table-column prop="id" label="ID" width="80" />
+
+          <el-table-column prop="name" label="名称" min-width="200">
+            <template #default="{ row }">
+              <div class="webhook-name">
+                <el-icon><Connection /></el-icon>
+                <span>{{ row.name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="类型" width="120">
+            <template #default="{ row }">
+              <el-tag size="small" type="info">{{ renderWebhookType(row.type, row.url) }}</el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="url" label="URL" min-width="360">
+            <template #default="{ row }">
+              <div class="webhook-url">
+                <el-text class="url-text" truncated>{{ row.url }}</el-text>
+                <el-button link type="primary" size="small" @click="copyUrl(row.url)">
+                  <el-icon><CopyDocument /></el-icon>
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
+
+          <el-table-column prop="is_active" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+                {{ row.is_active ? '启用' : '禁用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="关联项目" min-width="260">
+            <template #default="{ row }">
+              <div v-if="row.projects?.length" class="project-tags">
+                <el-popover
+                  v-if="row.projects.length > 3"
+                  placement="top"
+                  trigger="hover"
+                  width="400"
+                >
+                  <template #reference>
+                    <div class="project-tags-compact">
+                      <el-tag
+                        v-for="project in row.projects.slice(0, 3)"
+                        :key="project.id"
+                        size="small"
+                        type="info"
+                        class="project-tag"
+                        @click="goToProject(project)"
+                      >
+                        {{ project.name }}
+                      </el-tag>
+                      <el-tag size="small" type="warning">
+                        +{{ row.projects.length - 3 }}
+                      </el-tag>
+                    </div>
+                  </template>
+                  <div class="project-list-popover">
+                    <div class="popover-title">所有关联项目 ({{ row.projects.length }})</div>
+                    <div class="project-list">
+                      <el-tag
+                        v-for="project in row.projects"
+                        :key="project.id"
+                        size="small"
+                        type="info"
+                        class="project-tag"
+                        @click="goToProject(project)"
+                      >
+                        {{ project.name }}
+                      </el-tag>
+                    </div>
+                  </div>
+                </el-popover>
+                <div v-else class="project-tags-compact">
+                  <el-tag
+                    v-for="project in row.projects"
+                    :key="project.id"
+                    size="small"
+                    type="info"
+                    class="project-tag"
+                    @click="goToProject(project)"
+                  >
+                    {{ project.name }}
+                  </el-tag>
+                </div>
+              </div>
+              <span v-else class="text-muted">无</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="created_at" label="创建时间" width="180">
+            <template #default="{ row }">
+              {{ formatDate(row.created_at) }}
+            </template>
+          </el-table-column>
+
+          <el-table-column label="操作" width="320" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="testWebhook(row)">
+                <el-icon><VideoPlay /></el-icon>
+                测试
               </el-button>
-            </div>
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        
-        <el-table-column prop="is_active" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag
-              :type="row.is_active ? 'success' : 'info'"
-              size="small"
-            >
-              {{ row.is_active ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        
-        <el-table-column label="关联项目" min-width="250">
-          <template #default="{ row }">
-            <div v-if="row.projects?.length" class="project-tags">
-              <el-popover
-                v-if="row.projects.length > 3"
-                placement="top"
-                trigger="hover"
-                width="400"
+              <el-button link type="primary" size="small" @click="editWebhook(row)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              <el-popconfirm
+                title="确定要删除这个Webhook吗？"
+                confirm-button-text="确定"
+                cancel-button-text="取消"
+                @confirm="deleteWebhook(row.id)"
               >
                 <template #reference>
-                  <div class="project-tags-compact">
-                    <el-tag
-                      v-for="project in row.projects.slice(0, 3)"
-                      :key="project.id"
-                      size="small"
-                      type="info"
-                      class="project-tag"
-                      @click="goToProject(project)"
-                    >
-                      {{ project.name }}
-                    </el-tag>
-                    <el-tag size="small" type="warning">
-                      +{{ row.projects.length - 3 }}
-                    </el-tag>
-                  </div>
+                  <el-button link type="danger" size="small">
+                    <el-icon><Delete /></el-icon>
+                    删除
+                  </el-button>
                 </template>
-                <div class="project-list-popover">
-                  <div class="popover-title">所有关联项目 ({{ row.projects.length }})</div>
-                  <div class="project-list">
-                    <el-tag
-                      v-for="project in row.projects"
-                      :key="project.id"
-                      size="small"
-                      type="info"
-                      class="project-tag"
-                      @click="goToProject(project)"
-                    >
-                      {{ project.name }}
-                    </el-tag>
-                  </div>
-                </div>
-              </el-popover>
-              <div v-else class="project-tags-compact">
-                <el-tag
-                  v-for="project in row.projects"
-                  :key="project.id"
-                  size="small"
-                  type="info"
-                  class="project-tag"
-                  @click="goToProject(project)"
-                >
-                  {{ project.name }}
-                </el-tag>
-              </div>
-            </div>
-            <span v-else class="text-muted">无</span>
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="created_at" label="创建时间" width="180">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        
-        <el-table-column label="操作" width="280" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="testWebhook(row)">
-              <el-icon><VideoPlay /></el-icon>
-              测试
-            </el-button>
-            <el-button link type="primary" size="small" @click="editWebhook(row)">
-              <el-icon><Edit /></el-icon>
-              编辑
-            </el-button>
-            <el-popconfirm
-              title="确定要删除这个Webhook吗？"
-              confirm-button-text="确定"
-              cancel-button-text="取消"
-              @confirm="deleteWebhook(row.id)"
-            >
-              <template #reference>
-                <el-button link type="danger" size="small">
-                  <el-icon><Delete /></el-icon>
-                  删除
-                </el-button>
-              </template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
+              </el-popconfirm>
+            </template>
+          </el-table-column>
         </el-table>
       </div>
     </el-card>
-    
-    <!-- 添加/编辑Webhook对话框 -->
+
     <el-dialog
       v-model="modalVisible"
       :title="isEditing ? '编辑Webhook' : '添加Webhook'"
-      width="600px"
+      width="680px"
       :close-on-click-modal="false"
     >
-      <el-form
-        ref="formRef"
-        :model="currentWebhook"
-        :rules="rules"
-        label-width="100px"
-      >
+      <el-form ref="formRef" :model="currentWebhook" :rules="rules" label-width="110px">
         <el-form-item label="名称" prop="name">
-          <el-input
-            v-model="currentWebhook.name"
-            placeholder="为这个Webhook起一个易识别的名称"
-          >
+          <el-input v-model="currentWebhook.name" placeholder="为这个Webhook起一个易识别的名称">
             <template #prefix>
               <el-icon><Connection /></el-icon>
             </template>
           </el-input>
         </el-form-item>
-        
-        <el-form-item label="Webhook URL" prop="url">
+
+        <el-form-item prop="url">
+          <template #label>
+            <span class="label-inline">Webhook URL</span>
+          </template>
           <el-input
             v-model="currentWebhook.url"
-            placeholder="企业微信机器人的Webhook URL"
+            placeholder="请粘贴完整的 Webhook 地址"
+            class="full-width-input"
           >
             <template #prefix>
               <el-icon><Link /></el-icon>
             </template>
           </el-input>
-          <div class="form-item-help">
-            请输入企业微信群机器人的完整Webhook地址
+          <div class="form-item-help">填写有效地址后会自动识别渠道</div>
+        </el-form-item>
+
+        <el-form-item label="Webhook 类型" prop="type">
+          <el-select v-model="currentWebhook.type" placeholder="选择通知渠道">
+            <el-option v-for="option in webhookTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+          <div class="form-item-help" v-if="currentWebhook.url">
+            当前识别结果：<strong>{{ renderWebhookType(effectiveType) }}</strong>
+            <span class="type-hint">（{{ selectedType === 'auto' ? '自动识别' : '已手动指定' }}）</span>
           </div>
         </el-form-item>
-        
+
         <el-form-item label="描述" prop="description">
-          <el-input
-            v-model="currentWebhook.description"
-            type="textarea"
-            :rows="3"
-            placeholder="描述这个Webhook的用途"
-          />
+          <el-input v-model="currentWebhook.description" type="textarea" :rows="3" placeholder="描述这个Webhook的用途" />
         </el-form-item>
-        
+
         <el-form-item label="状态">
-          <el-switch
-            v-model="currentWebhook.is_active"
-            active-text="启用"
-            inactive-text="禁用"
-          />
+          <el-switch v-model="currentWebhook.is_active" active-text="启用" inactive-text="禁用" />
         </el-form-item>
+
+        <el-divider v-if="effectiveType === 'dingtalk'">钉钉配置</el-divider>
+
+        <template v-if="effectiveType === 'dingtalk'">
+          <el-alert
+            title="钉钉自定义机器人需开启安全策略（关键词、加签或IP白名单）"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="form-alert"
+          />
+
+          <el-form-item label="加签 Secret" prop="secret">
+            <el-input v-model="currentWebhook.secret" placeholder="请输入钉钉机器人加签Secret" />
+            <div class="form-item-help">加签用于生成签名，确保请求来源可靠。</div>
+          </el-form-item>
+
+          <el-form-item label="签名算法">
+            <el-input v-model="currentWebhook.signature_method" disabled />
+          </el-form-item>
+
+          <el-form-item label="安全关键词">
+            <el-select
+              v-model="currentWebhook.security_keywords"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="输入关键词后回车"
+            >
+              <el-option
+                v-for="keyword in currentWebhook.security_keywords || []"
+                :key="keyword"
+                :label="keyword"
+                :value="keyword"
+              />
+            </el-select>
+            <div class="form-item-help">如开启关键词策略，请保证消息体包含任意一个关键词。</div>
+          </el-form-item>
+        </template>
+
+        <el-divider v-if="effectiveType === 'custom'">自定义Webhook提示</el-divider>
+
+        <template v-if="effectiveType === 'custom' && currentWebhook.url">
+          <el-alert
+            title="自定义Webhook仅用于记录，GitLab Merge Alert 不会转发消息。请在 GitLab 中直接配置该地址。"
+            type="info"
+            :closable="false"
+            show-icon
+            class="form-alert"
+            style="margin: 0 0 12px 110px; width: calc(100% - 110px);"
+          />
+
+          <el-form-item label="自定义 Header">
+            <div class="custom-headers">
+              <div class="header-row" v-for="(item, index) in customHeaders" :key="index">
+                <el-input v-model="item.key" placeholder="Header 名称" class="header-input" />
+                <el-input v-model="item.value" placeholder="Header 值" class="header-input" />
+                <el-button
+                  v-if="customHeaders.length > 1"
+                  link
+                  type="danger"
+                  class="header-remove"
+                  @click="removeCustomHeader(index)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+              <el-button type="primary" size="small" class="header-add" @click="addCustomHeader">
+                +
+              </el-button>
+            </div>
+          </el-form-item>
+        </template>
       </el-form>
-      
+
       <template #footer>
         <el-button @click="modalVisible = false">取消</el-button>
         <el-button type="primary" @click="saveWebhook" :loading="submitting">
@@ -213,12 +279,11 @@
         </el-button>
       </template>
     </el-dialog>
-    
-    <!-- 测试Webhook对话框 -->
+
     <el-dialog
       v-model="testModalVisible"
       title="测试Webhook"
-      width="500px"
+      width="520px"
       class="webhook-test-dialog"
     >
       <div v-if="testingWebhook" class="webhook-test-content">
@@ -226,6 +291,10 @@
           <div class="info-row">
             <span class="info-label">名称</span>
             <span class="info-value">{{ testingWebhook.name }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">类型</span>
+            <span class="info-value">{{ renderWebhookType(testingWebhook.type, testingWebhook.url) }}</span>
           </div>
           <div class="info-row">
             <span class="info-label">URL</span>
@@ -246,11 +315,7 @@
         </div>
 
         <div class="test-actions">
-          <el-button
-            type="primary"
-            :loading="testingSending"
-            @click="sendTestMessage"
-          >
+          <el-button type="primary" :loading="testingSending" @click="sendTestMessage">
             <el-icon><Promotion /></el-icon>
             <span>{{ testingSending ? '发送中...' : '发送测试消息' }}</span>
           </el-button>
@@ -269,9 +334,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { FormInstance } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
 import {
   Plus,
@@ -284,7 +349,7 @@ import {
   Promotion
 } from '@element-plus/icons-vue'
 import { webhooksApi } from '@/api'
-import type { Webhook } from '@/api'
+import type { Webhook, WebhookType, UpsertWebhookPayload } from '@/api'
 import { formatDate } from '@/utils/format'
 
 const router = useRouter()
@@ -300,28 +365,119 @@ const testingWebhook = ref<Webhook | null>(null)
 const testResult = ref<{ success: boolean; message: string } | null>(null)
 const tableWrapperRef = ref<HTMLDivElement | null>(null)
 
-const currentWebhook = reactive<Partial<Webhook>>({
-  name: '',
-  url: '',
-  description: '',
-  is_active: true
-})
+const webhookTypeLabels: Record<string, string> = {
+  auto: '自动识别',
+  wechat: '企业微信',
+  dingtalk: '钉钉',
+  custom: '自定义'
+}
 
-const rules = {
-  name: [
-    { required: true, message: '请输入名称', trigger: 'blur' }
-  ],
+const webhookTypeOptions = [
+  { label: '自动识别', value: 'auto' },
+  { label: '企业微信', value: 'wechat' },
+  { label: '钉钉', value: 'dingtalk' },
+  { label: '自定义', value: 'custom' }
+]
+
+const detectWebhookType = (url?: string): WebhookType => {
+  if (!url) return 'custom'
+  try {
+    const parsed = new URL(url)
+    const host = parsed.host.toLowerCase()
+    if (host.includes('dingtalk.com') || host.includes('dingtalk')) {
+      return 'dingtalk'
+    }
+    if (host.includes('qyapi.weixin.qq.com') || host.includes('work.weixin.qq.com')) {
+      return 'wechat'
+    }
+    return 'custom'
+  } catch (error) {
+    return 'custom'
+  }
+}
+
+const currentWebhook = reactive<UpsertWebhookPayload & { id?: number }>(
+  {
+    id: undefined,
+    name: '',
+    url: '',
+    description: '',
+    type: 'auto',
+    signature_method: 'hmac_sha256',
+    secret: '',
+    security_keywords: [],
+    custom_headers: {},
+    is_active: true
+  }
+)
+
+const customHeaders = ref<Array<{ key: string; value: string }>>([{ key: '', value: '' }])
+
+const selectedType = computed<WebhookType>(() => (currentWebhook.type as WebhookType) || 'auto')
+const effectiveType = computed<WebhookType>(() =>
+  selectedType.value === 'auto' ? detectWebhookType(currentWebhook.url) : selectedType.value
+)
+
+const rules = reactive<FormRules<UpsertWebhookPayload & { id?: number }>>({
+  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   url: [
     { required: true, message: '请输入Webhook URL', trigger: 'blur' },
     { type: 'url', message: '请输入有效的URL', trigger: ['blur', 'change'] }
+  ],
+  secret: [
+    {
+      validator: (_rule, value, callback) => {
+        if (effectiveType.value === 'dingtalk' && !value) {
+          callback(new Error('钉钉安全加签需要填写Secret'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
   ]
+})
+
+watch(effectiveType, newType => {
+  if (newType === 'dingtalk' && !currentWebhook.signature_method) {
+    currentWebhook.signature_method = 'hmac_sha256'
+  }
+  if (newType !== 'dingtalk') {
+    currentWebhook.security_keywords = currentWebhook.security_keywords?.length ? currentWebhook.security_keywords : []
+  }
+})
+
+const renderWebhookType = (type?: string, url?: string) => {
+  const resolved = type && type !== 'auto' ? type : detectWebhookType(url)
+  return webhookTypeLabels[resolved] || webhookTypeLabels.custom
+}
+
+const resetCustomHeaders = (headers?: Record<string, string>) => {
+  const entries = headers ? Object.entries(headers) : []
+  customHeaders.value = entries.length
+    ? entries.map(([key, value]) => ({ key, value }))
+    : [{ key: '', value: '' }]
+}
+
+const buildCustomHeadersPayload = (): Record<string, string> => {
+  const payload: Record<string, string> = {}
+  customHeaders.value.forEach(({ key, value }) => {
+    const trimmedKey = key.trim()
+    if (trimmedKey) {
+      payload[trimmedKey] = value
+    }
+  })
+  return payload
 }
 
 const loadWebhooks = async () => {
   loading.value = true
   try {
     const res = await webhooksApi.getWebhooks()
-    webhooks.value = res.data || []
+    webhooks.value = (res.data || []).map(item => ({
+      ...item,
+      type: (item.type || detectWebhookType(item.url)) as WebhookType
+    }))
   } catch (error) {
     // 错误已在 API 客户端处理
   } finally {
@@ -335,14 +491,32 @@ const showAddModal = () => {
     name: '',
     url: '',
     description: '',
+    type: 'auto' as WebhookType,
+    signature_method: 'hmac_sha256',
+    secret: '',
+    security_keywords: [],
+    custom_headers: {},
     is_active: true
   })
+  resetCustomHeaders()
   isEditing.value = false
   modalVisible.value = true
 }
 
 const editWebhook = (webhook: Webhook) => {
-  Object.assign(currentWebhook, webhook)
+  Object.assign(currentWebhook, {
+    id: webhook.id,
+    name: webhook.name,
+    url: webhook.url,
+    description: webhook.description,
+    type: (webhook.type as WebhookType) || 'wechat',
+    signature_method: webhook.signature_method || 'hmac_sha256',
+    secret: webhook.secret || '',
+    security_keywords: webhook.security_keywords ? [...webhook.security_keywords] : [],
+    custom_headers: webhook.custom_headers ? { ...webhook.custom_headers } : {},
+    is_active: webhook.is_active
+  })
+  resetCustomHeaders(webhook.custom_headers || {})
   isEditing.value = true
   modalVisible.value = true
 }
@@ -350,15 +524,27 @@ const editWebhook = (webhook: Webhook) => {
 const saveWebhook = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
-  
+
   submitting.value = true
   try {
-    if (isEditing.value && currentWebhook.id) {
-      await webhooksApi.updateWebhook(currentWebhook.id, currentWebhook)
-    } else {
-      await webhooksApi.createWebhook(currentWebhook)
+    const payload: UpsertWebhookPayload = {
+      name: currentWebhook.name,
+      url: currentWebhook.url,
+      description: currentWebhook.description,
+      type: selectedType.value,
+      signature_method: currentWebhook.signature_method,
+      is_active: currentWebhook.is_active,
+      secret: effectiveType.value === 'dingtalk' ? (currentWebhook.secret || '') : '',
+      security_keywords: (currentWebhook.security_keywords || []).map(keyword => keyword.trim()).filter(Boolean),
+      custom_headers: effectiveType.value === 'custom' ? buildCustomHeadersPayload() : {}
     }
-    
+
+    if (isEditing.value && currentWebhook.id) {
+      await webhooksApi.updateWebhook(currentWebhook.id, payload)
+    } else {
+      await webhooksApi.createWebhook(payload)
+    }
+
     ElMessage.success(isEditing.value ? '更新成功' : '添加成功')
     modalVisible.value = false
     await loadWebhooks()
@@ -380,16 +566,30 @@ const deleteWebhook = async (webhookId: number) => {
 }
 
 const copyUrl = (url: string) => {
-  navigator.clipboard.writeText(url).then(() => {
-    ElMessage.success('已复制到剪贴板')
-  }).catch(() => {
-    ElMessage.error('复制失败')
-  })
+  navigator.clipboard
+    .writeText(url)
+    .then(() => {
+      ElMessage.success('已复制到剪贴板')
+    })
+    .catch(() => {
+      ElMessage.error('复制失败')
+    })
 }
 
 const copyTestingWebhookUrl = () => {
   if (!testingWebhook.value?.url) return
   copyUrl(testingWebhook.value.url)
+}
+
+const addCustomHeader = () => {
+  customHeaders.value.push({ key: '', value: '' })
+}
+
+const removeCustomHeader = (index: number) => {
+  customHeaders.value.splice(index, 1)
+  if (customHeaders.value.length === 0) {
+    customHeaders.value.push({ key: '', value: '' })
+  }
 }
 
 const testWebhook = (webhook: Webhook) => {
@@ -406,6 +606,10 @@ const sendTestMessage = async () => {
 
   try {
     const response = await webhooksApi.sendTestMessage(testingWebhook.value.id)
+
+    if (response.channel && testingWebhook.value) {
+      testingWebhook.value = { ...testingWebhook.value, type: response.channel as WebhookType }
+    }
 
     testResult.value = {
       success: true,
@@ -426,7 +630,6 @@ const sendTestMessage = async () => {
 }
 
 const goToProject = (_project: any) => {
-  // 跳转到项目管理页面
   router.push('/projects')
 }
 
@@ -450,7 +653,6 @@ const handleHorizontalScroll = (event: WheelEvent) => {
   const wrapper = tableWrapperRef.value
   if (!wrapper) return
 
-  // 将垂直滚动转换为水平滚动
   if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
     event.preventDefault()
     wrapper.scrollLeft += event.deltaY
@@ -463,7 +665,7 @@ const handleHorizontalScroll = (event: WheelEvent) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  
+
   .page-title {
     margin: 0;
     font-size: 24px;
@@ -471,7 +673,7 @@ const handleHorizontalScroll = (event: WheelEvent) => {
     color: #303133;
     display: flex;
     align-items: center;
-    
+
     &::before {
       content: '';
       width: 4px;
@@ -481,7 +683,7 @@ const handleHorizontalScroll = (event: WheelEvent) => {
       margin-right: 12px;
     }
   }
-  
+
   :deep(.el-button) {
     height: 40px;
     font-size: 15px;
@@ -499,17 +701,17 @@ const handleHorizontalScroll = (event: WheelEvent) => {
     display: flex;
     align-items: center;
     gap: 8px;
-    
+
     .el-icon {
       color: #409eff;
     }
   }
-  
+
   .webhook-url {
     display: flex;
     align-items: center;
     gap: 8px;
-    
+
     .url-text {
       flex: 1;
       font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
@@ -519,275 +721,133 @@ const handleHorizontalScroll = (event: WheelEvent) => {
       border-radius: 4px;
     }
   }
-  
-  // 增加操作按钮的大小
-  .el-button {
-    font-size: 14px !important;
-    
-    .el-icon {
-      font-size: 16px !important;
-    }
+
+  .project-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .project-tags-compact {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .project-tag {
+    cursor: pointer;
   }
 }
 
 .table-scroll-wrapper {
-  overflow: auto;
-  padding-bottom: 4px;
-  scrollbar-color: #c0c4cc transparent;
-}
-
-.table-scroll-wrapper::-webkit-scrollbar {
-  height: 8px;
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-thumb {
-  background-color: rgba(144, 147, 153, 0.6);
-  border-radius: 4px;
-}
-
-// 项目标签样式
-.project-tags {
-  .project-tags-compact {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-  }
-  
-  .project-tag {
-    cursor: pointer;
-    transition: all 0.3s;
-    
-    &:hover {
-      background-color: #409eff;
-      color: #fff;
-      border-color: #409eff;
-    }
-  }
-}
-
-// 弹出框中的项目列表
-.project-list-popover {
-  .popover-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: #303133;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #e6e8eb;
-  }
-  
-  .project-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    max-height: 300px;
-    overflow-y: auto;
-    
-    .project-tag {
-      cursor: pointer;
-      transition: all 0.3s;
-      
-      &:hover {
-        background-color: #409eff;
-        color: #fff;
-        border-color: #409eff;
-      }
-    }
-  }
-}
-
-.form-item-help {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 5px;
-}
-
-.webhook-test-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.webhook-info-card {
-  background: #f8fbff;
-  border: 1px solid #e4e7ed;
-  border-radius: 10px;
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.webhook-info-card .info-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.webhook-info-card .info-label {
-  flex-shrink: 0;
-  width: 56px;
-  font-weight: 600;
-  color: #606266;
-}
-
-.webhook-info-card .info-value {
-  flex: 1;
-  color: #303133;
-  word-break: break-all;
-}
-
-.webhook-info-card .info-value.url {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.webhook-info-card .url-text {
-  flex: 1;
-  display: block;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
-  font-size: 13px;
-  background: #fff;
-  border: 1px dashed #cfd6e4;
-  border-radius: 6px;
-  padding: 8px 12px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.test-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.test-actions .el-button {
-  width: 100%;
-  height: 44px;
-  font-size: 16px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.test-actions .el-button .el-icon {
-  font-size: 18px;
-}
-
-.test-actions .test-result {
-  margin: 0;
-}
-
-:deep(.webhook-test-dialog .el-dialog__body) {
-  padding: 26px 24px;
+  overflow-x: auto;
 }
 
 .text-muted {
   color: #909399;
 }
 
-:deep(.el-dialog) {
-  .el-dialog__header {
-    border-bottom: 1px solid #e6e8eb;
-    padding: 20px;
-  }
-  
-  .el-dialog__body {
-    padding: 30px 20px;
-  }
-  
-  .el-dialog__footer {
-    border-top: 1px solid #e6e8eb;
-    padding: 20px;
-  }
+.form-item-help {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 
-// 表格列宽度优化
-:deep(.el-table) {
-  // 确保表格能够自适应容器宽度
-  table-layout: fixed;
+.full-width-input {
   width: 100%;
-  
-  // 优化长文本显示
-  .cell {
-    word-break: break-word;
-    word-wrap: break-word;
-  }
-  
-  // 优化固定列的显示
-  .el-table__fixed-right {
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
-  }
 }
 
-// 响应式设计
-@media screen and (max-width: 1200px) {
-  :deep(.el-table) {
-    // 在中等屏幕上调整名称列宽度
-    .el-table__body .el-table__row td:nth-child(2) {
-      width: 18% !important;
-    }
-    // 调整URL列宽度
-    .el-table__body .el-table__row td:nth-child(3) {
-      width: 28% !important;
-    }
-    // 调整描述列宽度
-    .el-table__body .el-table__row td:nth-child(4) {
-      width: 18% !important;
-    }
-    // 调整关联项目列宽度
-    .el-table__body .el-table__row td:nth-child(6) {
-      width: 22% !important;
-    }
-  }
+.label-inline {
+  white-space: nowrap;
 }
 
-@media screen and (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
+.type-hint {
+  margin-left: 4px;
+  color: #606266;
+}
+
+.form-alert {
+  margin-bottom: 12px;
+}
+
+.custom-headers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+
+  .header-row {
+    display: flex;
     gap: 12px;
-    
-    .page-title {
-      margin-bottom: 0;
+    align-items: center;
+    width: 100%;
+  }
+
+  .header-input {
+    flex: 1;
+  }
+
+  .header-remove {
+    flex-shrink: 0;
+  }
+
+  .header-add {
+    align-self: flex-start;
+    margin-top: 8px;
+    min-width: 32px;
+    font-size: 18px;
+    font-weight: 500;
+  }
+}
+
+.webhook-test-dialog {
+  .webhook-info-card {
+    background: #f5f7fa;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+
+      .info-label {
+        font-weight: 600;
+        color: #606266;
+      }
+
+      .info-value {
+        color: #303133;
+        max-width: 320px;
+        text-align: right;
+
+        &.url {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+
+          .url-text {
+            flex: 1;
+            text-align: right;
+          }
+        }
+      }
     }
   }
-  
-  :deep(.el-table) {
-    font-size: 12px;
-    
-    // 在小屏幕上隐藏描述列和关联项目列
-    .el-table__header th:nth-child(4),
-    .el-table__body td:nth-child(4),
-    .el-table__header th:nth-child(6),
-    .el-table__body td:nth-child(6) {
-      display: none;
+
+  .test-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    .test-result {
+      margin-top: 8px;
     }
-    
-    // 调整名称列在小屏幕上的显示
-    .el-table__body .el-table__row td:nth-child(2) {
-      width: 25% !important;
-    }
-    
-    // 调整URL列在小屏幕上的显示
-    .el-table__body .el-table__row td:nth-child(3) {
-      width: 45% !important;
-    }
-  }
-  
-  :deep(.el-dialog) {
-    width: 90% !important;
   }
 }
 </style>

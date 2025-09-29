@@ -24,3 +24,12 @@ encryption_key: "CHANGE-ME-TO-A-32-CHAR-SECRET"
 # 2. 生产环境建议使用环境变量来配置敏感信息
 # 3. 支持的环境变量前缀：GMA_
 #    例如：GMA_GITLAB_URL, GMA_ENCRYPTION_KEY
+
+# 通知渠道配置
+notification:
+  dingtalk:
+    rate_limit_per_minute: 20
+    monthly_quota: 5000
+    request_timeout: 5s
+    retry_attempts: 3
+

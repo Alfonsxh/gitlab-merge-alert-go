@@ -10,6 +10,7 @@ import (
 
 	"gitlab-merge-alert-go/internal/middleware"
 	"gitlab-merge-alert-go/internal/models"
+	"gitlab-merge-alert-go/internal/services"
 	"gitlab-merge-alert-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,7 @@ func (h *Handler) GetWebhooks(c *gin.Context) {
 	var webhooks []models.Webhook
 
 	// 应用所有权过滤
-	query := h.db.Preload("Projects")
+	query := h.db.Preload("Projects").Preload("Settings")
 	query = middleware.ApplyOwnershipFilter(c, query, "webhooks")
 
 	if err := query.Find(&webhooks).Error; err != nil {
@@ -33,31 +34,8 @@ func (h *Handler) GetWebhooks(c *gin.Context) {
 
 	// 转换为响应格式
 	responses := make([]models.WebhookResponse, 0, len(webhooks))
-	for _, webhook := range webhooks {
-		response := models.WebhookResponse{
-			ID:          webhook.ID,
-			Name:        webhook.Name,
-			URL:         webhook.URL,
-			Description: webhook.Description,
-			IsActive:    webhook.IsActive,
-			CreatedAt:   webhook.CreatedAt,
-			UpdatedAt:   webhook.UpdatedAt,
-		}
-
-		// 转换关联的项目
-		for _, project := range webhook.Projects {
-			response.Projects = append(response.Projects, models.ProjectResponse{
-				ID:              project.ID,
-				GitLabProjectID: project.GitLabProjectID,
-				Name:            project.Name,
-				URL:             project.URL,
-				Description:     project.Description,
-				CreatedAt:       project.CreatedAt,
-				UpdatedAt:       project.UpdatedAt,
-			})
-		}
-
-		responses = append(responses, response)
+	for idx := range webhooks {
+		responses = append(responses, buildWebhookResponse(&webhooks[idx]))
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": responses})
@@ -85,6 +63,20 @@ func (h *Handler) CreateWebhook(c *gin.Context) {
 		webhook.IsActive = *req.IsActive
 	}
 
+	targetURL := webhook.URL
+	channel := strings.ToLower(strings.TrimSpace(req.Type))
+	if channel == "" || channel == models.WebhookTypeAuto {
+		channel = models.DetectWebhookType(targetURL)
+	}
+
+	signatureMethod := req.SignatureMethod
+	if signatureMethod == "" {
+		signatureMethod = models.SignatureMethodHMACSHA256
+	}
+
+	webhook.Type = channel
+	webhook.ApplyDefaults()
+
 	if err := h.db.Create(webhook).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to create webhook [Name: %s, URL: %s]: %v", req.Name, req.URL, err)
 
@@ -98,15 +90,22 @@ func (h *Handler) CreateWebhook(c *gin.Context) {
 
 	logger.GetLogger().Infof("Successfully created webhook [ID: %d, Name: %s]", webhook.ID, webhook.Name)
 
-	response := models.WebhookResponse{
-		ID:          webhook.ID,
-		Name:        webhook.Name,
-		URL:         webhook.URL,
-		Description: webhook.Description,
-		IsActive:    webhook.IsActive,
-		CreatedAt:   webhook.CreatedAt,
-		UpdatedAt:   webhook.UpdatedAt,
+	secret := req.Secret
+	keywords := req.SecurityKeywords
+	headers := req.CustomHeaders
+	if err := h.upsertWebhookSettings(webhook.ID, &signatureMethod, &secret, &keywords, &headers); err != nil {
+		logger.GetLogger().Errorf("Failed to persist webhook settings [WebhookID: %d]: %v", webhook.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建Webhook失败"})
+		return
 	}
+
+	if err := h.db.Preload("Settings").Preload("Projects").First(webhook, webhook.ID).Error; err != nil {
+		logger.GetLogger().Errorf("Failed to reload webhook [ID: %d]: %v", webhook.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建Webhook失败"})
+		return
+	}
+
+	response := buildWebhookResponse(webhook)
 
 	c.JSON(http.StatusCreated, gin.H{"data": response})
 }
@@ -125,7 +124,7 @@ func (h *Handler) UpdateWebhook(c *gin.Context) {
 	}
 
 	var webhook models.Webhook
-	if err := h.db.First(&webhook, id).Error; err != nil {
+	if err := h.db.Preload("Settings").First(&webhook, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.GetLogger().Warnf("Webhook not found [ID: %d]", id)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Webhook not found"})
@@ -136,12 +135,14 @@ func (h *Handler) UpdateWebhook(c *gin.Context) {
 		return
 	}
 
-	// 更新字段
+	targetURL := webhook.URL
+
 	if req.Name != "" {
 		webhook.Name = req.Name
 	}
 	if req.URL != "" {
 		webhook.URL = req.URL
+		targetURL = req.URL
 	}
 	if req.Description != "" {
 		webhook.Description = req.Description
@@ -149,6 +150,41 @@ func (h *Handler) UpdateWebhook(c *gin.Context) {
 	if req.IsActive != nil {
 		webhook.IsActive = *req.IsActive
 	}
+
+	if req.Type != "" {
+		channel := strings.ToLower(strings.TrimSpace(req.Type))
+		if channel == models.WebhookTypeAuto {
+			channel = models.DetectWebhookType(targetURL)
+		}
+		webhook.Type = channel
+	} else if req.URL != "" {
+		webhook.Type = models.DetectWebhookType(targetURL)
+	}
+
+	var signaturePtr *string
+	if req.SignatureMethod != "" {
+		sig := req.SignatureMethod
+		signaturePtr = &sig
+	}
+
+	var secretPtr *string
+	if req.Secret != nil {
+		secretPtr = req.Secret
+	}
+
+	var keywordsPtr *[]string
+	if req.SecurityKeywords != nil {
+		keywords := req.SecurityKeywords
+		keywordsPtr = &keywords
+	}
+
+	var headersPtr *map[string]string
+	if req.CustomHeaders != nil {
+		headers := req.CustomHeaders
+		headersPtr = &headers
+	}
+
+	webhook.ApplyDefaults()
 
 	if err := h.db.Save(&webhook).Error; err != nil {
 		logger.GetLogger().Errorf("Failed to update webhook [ID: %d]: %v", id, err)
@@ -163,15 +199,19 @@ func (h *Handler) UpdateWebhook(c *gin.Context) {
 
 	logger.GetLogger().Infof("Successfully updated webhook [ID: %d, Name: %s]", webhook.ID, webhook.Name)
 
-	response := models.WebhookResponse{
-		ID:          webhook.ID,
-		Name:        webhook.Name,
-		URL:         webhook.URL,
-		Description: webhook.Description,
-		IsActive:    webhook.IsActive,
-		CreatedAt:   webhook.CreatedAt,
-		UpdatedAt:   webhook.UpdatedAt,
+	if err := h.upsertWebhookSettings(webhook.ID, signaturePtr, secretPtr, keywordsPtr, headersPtr); err != nil {
+		logger.GetLogger().Errorf("Failed to update webhook settings [ID: %d]: %v", webhook.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新Webhook失败"})
+		return
 	}
+
+	if err := h.db.Preload("Settings").Preload("Projects").First(&webhook, id).Error; err != nil {
+		logger.GetLogger().Errorf("Failed to reload webhook [ID: %d]: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新Webhook失败"})
+		return
+	}
+
+	response := buildWebhookResponse(&webhook)
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }
@@ -292,7 +332,7 @@ func (h *Handler) SendTestMessage(c *gin.Context) {
 
 	// 查找webhook
 	var webhook models.Webhook
-	query := h.db.Model(&models.Webhook{})
+	query := h.db.Model(&models.Webhook{}).Preload("Settings")
 	query = middleware.ApplyOwnershipFilter(c, query, "webhooks")
 
 	if err := query.First(&webhook, id).Error; err != nil {
@@ -312,21 +352,43 @@ func (h *Handler) SendTestMessage(c *gin.Context) {
 		return
 	}
 
-	// 构建测试消息内容
-	testMessage := fmt.Sprintf(
-		"🔔 GitLab Merge Alert 测试消息\n\n"+
-			"✅ Webhook连接测试成功！\n"+
-			"📌 Webhook名称：%s\n"+
-			"🕐 测试时间：%s\n\n"+
-			"如果您看到这条消息，说明企业微信机器人配置正确。",
-		webhook.Name,
-		time.Now().Format("2006-01-02 15:04:05"),
-	)
+	channel := strings.ToLower(strings.TrimSpace(webhook.Type))
+	if channel == "" || channel == models.WebhookTypeAuto {
+		channel = models.DetectWebhookType(webhook.URL)
+	}
 
-	// 发送测试消息
-	if err := h.wechatService.SendMessage(webhook.URL, testMessage, nil); err != nil {
-		logger.GetLogger().Errorf("Failed to send test message to webhook [ID: %d, Name: %s]: %v",
-			webhook.ID, webhook.Name, err)
+	if channel == models.WebhookTypeCustom {
+		c.JSON(http.StatusOK, gin.H{
+			"message":      "自定义 Webhook 不支持在平台内测试，请在 GitLab 中直接验证",
+			"webhook_name": webhook.Name,
+			"webhook_url":  webhook.URL,
+			"channel":      channel,
+		})
+		return
+	}
+
+	webhook.ApplyDefaults()
+	sender, err := h.senderFactory.SenderFor(&webhook)
+	if err != nil {
+		logger.GetLogger().Errorf("Failed to resolve sender for webhook [ID: %d]: %v", webhook.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "解析Webhook类型失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	payload := &services.MergeRequestPayload{
+		ProjectName:  fmt.Sprintf("Webhook测试 - %s", webhook.Name),
+		SourceBranch: "test/source",
+		TargetBranch: "test/target",
+		AuthorName:   "GitLab Merge Alert",
+		Title:        fmt.Sprintf("Webhook [%s] 连接测试", webhook.Name),
+		URL:          h.config.PublicWebhookURL,
+	}
+
+	if err := sender.Send(c.Request.Context(), &webhook, payload); err != nil {
+		logger.GetLogger().Errorf("Failed to send test message to webhook [ID: %d, Name: %s]: %v", webhook.ID, webhook.Name, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "发送测试消息失败",
 			"details": err.Error(),
@@ -334,7 +396,6 @@ func (h *Handler) SendTestMessage(c *gin.Context) {
 		return
 	}
 
-	// 记录通知历史
 	accountID, _ := middleware.GetAccountID(c)
 	notification := &models.Notification{
 		Title:            "Webhook测试",
@@ -345,15 +406,91 @@ func (h *Handler) SendTestMessage(c *gin.Context) {
 
 	if err := h.db.Create(notification).Error; err != nil {
 		logger.GetLogger().Warnf("Failed to save test notification history: %v", err)
-		// 不影响主要功能，只记录警告
 	}
 
-	logger.GetLogger().Infof("Successfully sent test message to webhook [ID: %d, Name: %s]",
-		webhook.ID, webhook.Name)
+	logger.GetLogger().Infof("Successfully sent test message to webhook [ID: %d, Name: %s]", webhook.ID, webhook.Name)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":      "测试消息发送成功",
 		"webhook_name": webhook.Name,
 		"sent_at":      time.Now().Format("2006-01-02 15:04:05"),
+		"channel":      channel,
 	})
+}
+
+func buildWebhookResponse(webhook *models.Webhook) models.WebhookResponse {
+	if webhook == nil {
+		return models.WebhookResponse{}
+	}
+
+	webhook.ApplyDefaults()
+
+	signatureMethod := models.SignatureMethodHMACSHA256
+	secret := ""
+	if webhook.Settings != nil {
+		if webhook.Settings.SignatureMethod != "" {
+			signatureMethod = webhook.Settings.SignatureMethod
+		}
+		secret = webhook.Settings.Secret
+	}
+
+	response := models.WebhookResponse{
+		ID:               webhook.ID,
+		Name:             webhook.Name,
+		URL:              webhook.URL,
+		Description:      webhook.Description,
+		Type:             webhook.Type,
+		SignatureMethod:  signatureMethod,
+		Secret:           secret,
+		SecurityKeywords: webhook.SecurityKeywordsAsSlice(),
+		CustomHeaders:    webhook.CustomHeadersAsMap(),
+		IsActive:         webhook.IsActive,
+		CreatedAt:        webhook.CreatedAt,
+		UpdatedAt:        webhook.UpdatedAt,
+	}
+
+	for _, project := range webhook.Projects {
+		response.Projects = append(response.Projects, models.ProjectResponse{
+			ID:              project.ID,
+			GitLabProjectID: project.GitLabProjectID,
+			Name:            project.Name,
+			URL:             project.URL,
+			Description:     project.Description,
+			CreatedAt:       project.CreatedAt,
+			UpdatedAt:       project.UpdatedAt,
+		})
+	}
+
+	return response
+}
+
+func (h *Handler) upsertWebhookSettings(webhookID uint, signature *string, secret *string, keywords *[]string, headers *map[string]string) error {
+	var setting models.WebhookSetting
+	err := h.db.Where("webhook_id = ?", webhookID).First(&setting).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		setting = models.WebhookSetting{WebhookID: webhookID}
+	} else if err != nil {
+		return err
+	}
+
+	if signature != nil && *signature != "" {
+		setting.SignatureMethod = *signature
+	}
+	if secret != nil {
+		setting.Secret = *secret
+	}
+	if keywords != nil {
+		setting.SecurityKeywords = models.ToStringList(*keywords)
+	}
+	if headers != nil {
+		setting.CustomHeaders = models.ToStringMap(*headers)
+	}
+
+	setting.ApplyDefaults()
+
+	if setting.ID == 0 {
+		return h.db.Create(&setting).Error
+	}
+
+	return h.db.Save(&setting).Error
 }

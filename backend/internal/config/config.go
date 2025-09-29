@@ -9,16 +9,28 @@ import (
 )
 
 type Config struct {
-	Host             string        `mapstructure:"host"`
-	Port             int           `mapstructure:"port"`
-	Environment      string        `mapstructure:"environment"`
-	LogLevel         string        `mapstructure:"log_level"`
-	DatabasePath     string        `mapstructure:"database_path"`
-	GitLabURL        string        `mapstructure:"gitlab_url" json:"-"` // 敏感字段不输出到日志
-	PublicWebhookURL string        `mapstructure:"public_webhook_url"`
-	JWTSecret        string        `mapstructure:"jwt_secret" json:"-"` // JWT 密钥
-	JWTDuration      time.Duration `mapstructure:"jwt_duration"`        // JWT 过期时间
-	EncryptionKey    string        `mapstructure:"encryption_key" json:"-"`
+	Host             string             `mapstructure:"host"`
+	Port             int                `mapstructure:"port"`
+	Environment      string             `mapstructure:"environment"`
+	LogLevel         string             `mapstructure:"log_level"`
+	DatabasePath     string             `mapstructure:"database_path"`
+	GitLabURL        string             `mapstructure:"gitlab_url" json:"-"`
+	PublicWebhookURL string             `mapstructure:"public_webhook_url"`
+	JWTSecret        string             `mapstructure:"jwt_secret" json:"-"`
+	JWTDuration      time.Duration      `mapstructure:"jwt_duration"`
+	EncryptionKey    string             `mapstructure:"encryption_key" json:"-"`
+	Notification     NotificationConfig `mapstructure:"notification"`
+}
+
+type NotificationConfig struct {
+	DingTalk DingTalkConfig `mapstructure:"dingtalk"`
+}
+
+type DingTalkConfig struct {
+	RateLimitPerMinute int           `mapstructure:"rate_limit_per_minute"`
+	MonthlyQuota       int           `mapstructure:"monthly_quota"`
+	RequestTimeout     time.Duration `mapstructure:"request_timeout"`
+	RetryAttempts      int           `mapstructure:"retry_attempts"`
 }
 
 // MaskSensitive 返回一个掩码后的配置副本，用于日志输出
@@ -55,8 +67,8 @@ func maskURL(url string) string {
 func Load() (*Config, error) {
 	// 配置文件查找优先级：config.local.yaml > config.yaml > 环境变量
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")           // 当前目录（backend 目录运行时）
-	viper.AddConfigPath("..")          // 父目录（从项目根目录找配置）
+	viper.AddConfigPath(".")  // 当前目录（backend 目录运行时）
+	viper.AddConfigPath("..") // 父目录（从项目根目录找配置）
 	viper.AddConfigPath("./configs")
 	viper.AddConfigPath("/etc/gitlab-merge-alert")
 
@@ -67,6 +79,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("log_level", "info")
 	viper.SetDefault("database_path", "../data/gitlab-merge-alert.db")
 	viper.SetDefault("jwt_duration", "24h")
+	viper.SetDefault("notification.dingtalk.rate_limit_per_minute", 20)
+	viper.SetDefault("notification.dingtalk.monthly_quota", 5000)
+	viper.SetDefault("notification.dingtalk.request_timeout", "5s")
+	viper.SetDefault("notification.dingtalk.retry_attempts", 3)
 
 	// 环境变量绑定（优先级最高）
 	viper.SetEnvPrefix("GMA")
@@ -98,7 +114,6 @@ func Load() (*Config, error) {
 		config.EncryptionKey = config.JWTSecret
 	}
 
-	// 验证必要的敏感配置
 	if err := validateConfig(&config); err != nil {
 		return nil, err
 	}

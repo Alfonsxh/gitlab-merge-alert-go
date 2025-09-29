@@ -112,6 +112,7 @@
                       type="info"
                     >
                       {{ webhook.name }}
+                      <span class="webhook-type-tag">({{ displayWebhookType(webhook) }})</span>
                     </el-tag>
                   </el-space>
                   <span v-else class="text-muted">无</span>
@@ -384,6 +385,7 @@
                     <div class="webhook-main">
                       <el-icon class="webhook-icon"><Connection /></el-icon>
                       <span class="webhook-name">{{ webhook.name }}</span>
+                      <el-tag type="info" size="small" class="webhook-type-pill">{{ displayWebhookType(webhook) }}</el-tag>
                     </div>
                     <div class="webhook-url">{{ formatWebhookUrl(webhook.url) }}</div>
                   </div>
@@ -414,7 +416,8 @@
                   :value="webhook.id"
                 >
                   <span>{{ webhook.name }}</span>
-                  <span style="color: #999; margin-left: 10px">{{ formatWebhookUrl(webhook.url) }}</span>
+                  <el-tag size="small" type="info" class="option-type">{{ displayWebhookType(webhook) }}</el-tag>
+                  <span class="option-url">{{ formatWebhookUrl(webhook.url) }}</span>
                 </el-option>
               </el-select>
             </div>
@@ -454,7 +457,7 @@ import {
   Loading
 } from '@element-plus/icons-vue'
 import { projectsApi, webhooksApi } from '@/api'
-import type { Project, Webhook } from '@/api'
+import type { Project, Webhook, WebhookType } from '@/api'
 import { formatDate } from '@/utils/format'
 import { useAuthStore } from '@/stores/auth'
 // import BatchImport from './BatchImport.vue' // 不再需要，功能已整合到主对话框
@@ -463,6 +466,35 @@ const router = useRouter()
 const authStore = useAuthStore()
 const projects = ref<Project[]>([])
 const availableWebhooks = ref<Webhook[]>([])
+const webhookTypeLabels: Record<string, string> = {
+  auto: '自动识别',
+  wechat: '企业微信',
+  dingtalk: '钉钉',
+  custom: '自定义'
+}
+
+const detectWebhookType = (url?: string): WebhookType => {
+  if (!url) return 'custom'
+  try {
+    const parsed = new URL(url)
+    const host = parsed.host.toLowerCase()
+    if (host.includes('dingtalk.com') || host.includes('dingtalk')) {
+      return 'dingtalk'
+    }
+    if (host.includes('qyapi.weixin.qq.com') || host.includes('work.weixin.qq.com')) {
+      return 'wechat'
+    }
+    return 'custom'
+  } catch (error) {
+    return 'custom'
+  }
+}
+
+const displayWebhookType = (webhook: Webhook) => {
+  const type = webhook.type && webhook.type !== 'auto' ? webhook.type : detectWebhookType(webhook.url)
+  return webhookTypeLabels[type] || webhookTypeLabels.custom
+}
+
 const loading = ref(false)
 const syncingWebhook = ref<number | null>(null)
 const batchChecking = ref(false)
@@ -602,7 +634,10 @@ const loadProjects = async () => {
 const loadWebhooks = async () => {
   try {
     const res = await webhooksApi.getWebhooks()
-    availableWebhooks.value = res.data || []
+    availableWebhooks.value = (res.data || []).map(item => ({
+      ...item,
+      type: (item.type && item.type !== 'auto' ? item.type : detectWebhookType(item.url)) as WebhookType
+    }))
   } catch (error) {
     // 错误已在 API 客户端处理
   }

@@ -381,6 +381,7 @@
             >
               <template #default="{ option }">
                 <span>{{ option.name }}</span>
+                <el-tag size="small" type="info" class="option-type-tag">{{ option.typeLabel || displayWebhookType(option) }}</el-tag>
                 <el-tag v-if="option.assigned_to && option.assigned_to !== assignForm.id" 
                   type="info" size="small" style="margin-left: 8px">
                   已分配给: {{ option.assigned_to_name }}
@@ -409,6 +410,7 @@ import { useAuthStore } from '@/stores/auth'
 import { accountAPI } from '@/api/auth'
 import { gitlabApi, projectsApi } from '@/api'
 import { webhooksApi } from '@/api/webhooks'
+import type { WebhookType } from '@/api/webhooks'
 import { usersApi } from '@/api/users'
 import { resourceManagerAPI } from '@/api/resource-manager'
 import type { AccountResponse } from '@/api/types/auth'
@@ -520,6 +522,35 @@ const assignForm = reactive({
 })
 const projectList = ref<any[]>([])
 const webhookList = ref<any[]>([])
+const webhookTypeLabels: Record<string, string> = {
+  auto: '自动识别',
+  wechat: '企业微信',
+  dingtalk: '钉钉',
+  custom: '自定义'
+}
+
+const detectWebhookType = (url?: string): WebhookType => {
+  if (!url) return 'custom'
+  try {
+    const parsed = new URL(url)
+    const host = parsed.host.toLowerCase()
+    if (host.includes('dingtalk.com') || host.includes('dingtalk')) {
+      return 'dingtalk'
+    }
+    if (host.includes('qyapi.weixin.qq.com') || host.includes('work.weixin.qq.com')) {
+      return 'wechat'
+    }
+    return 'custom'
+  } catch (error) {
+    return 'custom'
+  }
+}
+
+const displayWebhookType = (webhook: { type?: string; url?: string }) => {
+  const type = webhook.type && webhook.type !== 'auto' ? webhook.type : detectWebhookType(webhook.url)
+  return webhookTypeLabels[type] || webhookTypeLabels.custom
+}
+
 const userList = ref<any[]>([])
 const assignedProjects = ref<number[]>([])
 const assignedWebhooks = ref<number[]>([])
@@ -830,11 +861,17 @@ const loadResourceLists = async () => {
       disabled: false // 标记资源是否已分配给其他账户
     }))
 
-    webhookList.value = webhookData.map((w: any) => ({
-      id: w.id,
-      name: w.name,
-      disabled: false
-    }))
+    webhookList.value = webhookData.map((w: any) => {
+      const type = (w.type && w.type !== 'auto' ? w.type : detectWebhookType(w.url)) as WebhookType
+      return {
+        id: w.id,
+        name: w.name,
+        url: w.url,
+        type,
+        typeLabel: webhookTypeLabels[type] || webhookTypeLabels.custom,
+        disabled: false
+      }
+    })
 
     userList.value = userData.map((u: any) => ({
       id: u.id,

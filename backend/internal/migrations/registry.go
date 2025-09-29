@@ -17,6 +17,7 @@ func GetAllMigrations() []Migration {
 		&Migration008AddGitLabAccessTokenToAccounts{},
 		&Migration009RemoveAutoManageWebhook{},
 		&Migration010AddAdminInitializationFields{},
+		&Migration011AddWebhookMultiChannel{},
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"gitlab-merge-alert-go/pkg/logger"
 	"net/http"
-	"strings"
 )
 
 type weChatService struct {
@@ -65,30 +64,17 @@ func (s *weChatService) SendMessage(webhookURL, content string, mentionedMobiles
 	return nil
 }
 
-func (s *weChatService) FormatMergeRequestMessage(projectName, sourceBranch, targetBranch, mergeFrom, mergeTitle, clickURL string, mergeToList []string) string {
+func (s *weChatService) FormatMergeRequestMessage(projectName, sourceBranch, targetBranch, mergeFrom, mergeTitle, clickURL string, mergeToList []string, mentionedMobiles []string) string {
 
-	content := fmt.Sprintf(`%s
-Project: %s
-   From: %s -> %s (%s)
-MR Info: %s
-Click -> %s`,
-		strings.Repeat("=", 32)+" Merge Request "+strings.Repeat("=", 32),
-		projectName,
-		sourceBranch,
-		targetBranch,
-		mergeFrom,
-		mergeTitle,
-		clickURL,
-	)
-
-	// 添加 @ 提醒
-	if len(mergeToList) > 0 {
-		mentions := ""
-		for _, person := range mergeToList {
-			mentions += fmt.Sprintf(" @%s", person)
-		}
-		content += "\n" + mentions
+	payload := &MergeRequestPayload{
+		ProjectName:       projectName,
+		SourceBranch:      sourceBranch,
+		TargetBranch:      targetBranch,
+		AuthorName:        mergeFrom,
+		Title:             mergeTitle,
+		URL:               clickURL,
+		MentionedAccounts: mergeToList,
 	}
 
-	return content
+	return FormatMergeRequestPayloadTextWithPhones(payload, mentionedMobiles)
 }

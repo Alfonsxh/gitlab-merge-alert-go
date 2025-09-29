@@ -17,6 +17,7 @@ type Handler struct {
 	config           *config.Config
 	gitlabService    services.GitLabService
 	wechatService    services.WeChatService
+	senderFactory    services.SenderFactory
 	notifyService    services.NotificationService
 	authService      services.AuthService
 	authMiddleware   *middleware.AuthMiddleware
@@ -27,7 +28,8 @@ type Handler struct {
 func New(db *gorm.DB, cfg *config.Config) *Handler {
 	gitlabService := services.NewGitLabService(cfg.GitLabURL, "")
 	wechatService := services.NewWeChatService()
-	notifyService := services.NewNotificationService(db, wechatService)
+	senderFactory := services.NewMessageSenderFactory(db, cfg, wechatService)
+	notifyService := services.NewNotificationService(db, senderFactory)
 
 	// 使用配置中的 JWT 设置，如果没有则使用默认值
 	jwtSecret := cfg.JWTSecret
@@ -48,6 +50,7 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 		config:           cfg,
 		gitlabService:    gitlabService,
 		wechatService:    wechatService,
+		senderFactory:    senderFactory,
 		notifyService:    notifyService,
 		authService:      authService,
 		authMiddleware:   authMiddleware,
