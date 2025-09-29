@@ -58,25 +58,5 @@ Click -> %s`,
 		payload.URL,
 	)
 
-	if len(payload.MentionedAccounts) > 0 {
-		mentions := ""
-		for _, account := range payload.MentionedAccounts {
-			mentions += fmt.Sprintf(" @%s", account)
-		}
-		if mentions != "" {
-			content += "\n" + strings.TrimSpace(mentions)
-		}
-	}
-
-	if len(mentionedMobiles) > 0 {
-		phoneMentions := ""
-		for _, mobile := range mentionedMobiles {
-			phoneMentions += fmt.Sprintf(" @%s", mobile)
-		}
-		if phoneMentions != "" {
-			content += "\n" + strings.TrimSpace(phoneMentions)
-		}
-	}
-
 	return content
 }

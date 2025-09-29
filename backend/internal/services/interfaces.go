@@ -72,5 +72,5 @@ type GitLabService interface {
 // WeChatService 微信服务接口
 type WeChatService interface {
 	SendMessage(webhookURL, content string, mentionedMobiles []string) error
-	FormatMergeRequestMessage(projectName, sourceBranch, targetBranch, mergeFrom, mergeTitle, clickURL string, mergeToList []string) string
+	FormatMergeRequestMessage(projectName, sourceBranch, targetBranch, mergeFrom, mergeTitle, clickURL string, mergeToList []string, mentionedMobiles []string) string
 }

@@ -97,13 +97,13 @@ func (s *notificationService) sendNotifications(ctx context.Context, project *mo
 	if len(payload.Assignees) > 0 {
 		logger.GetLogger().Infof("从 GitLab webhook 获取到 %d 个指派人", len(payload.Assignees))
 		for i, info := range payload.Assignees {
-			logger.GetLogger().Infof("  指派人 %d: 邮箱=%s, 用户名=%s", i+1, info.Email, info.Username)
+			logger.GetLogger().Infof("  指派人 %d: GitLab用户名=%s, 邮箱=%s", i+1, info.Username, info.Email)
 		}
 	} else {
 		logger.GetLogger().Warnf("没有找到指派人信息")
 	}
 
-	logger.GetLogger().Infof("最终获得 %d 个手机号用于@功能", len(payload.MentionedMobiles))
+	logger.GetLogger().Infof("通过数据库匹配获得 %d 个手机号用于@功能", len(payload.MentionedMobiles))
 	for i, mobile := range payload.MentionedMobiles {
 		logger.GetLogger().Infof("  手机号 %d: %s", i+1, mobile)
 	}
@@ -141,38 +141,49 @@ func (s *notificationService) lookupMentionedMobiles(assignees []models.Assignee
 	var emailList []string
 	var usernameList []string
 	for _, info := range assignees {
+		// 优先收集所有的 username，因为它更稳定
+		if info.Username != "" {
+			usernameList = append(usernameList, info.Username)
+		}
+		// 同时收集有效的邮箱（非 REDACTED）
 		if info.Email != "" && info.Email != "[REDACTED]" {
 			emailList = append(emailList, info.Email)
-		} else if info.Username != "" {
-			usernameList = append(usernameList, info.Username)
 		}
 	}
 
 	phoneMap := make(map[string]bool)
 	var mentionedMobiles []string
 
-	if len(emailList) > 0 {
+	// 优先通过 GitLab 用户名查询，因为它更可靠
+	if len(usernameList) > 0 {
 		var users []models.User
-		if err := s.db.Where("email IN ?", emailList).Find(&users).Error; err != nil {
-			return nil, err
-		}
-		for _, user := range users {
-			if user.Phone != "" && !phoneMap[user.Phone] {
-				mentionedMobiles = append(mentionedMobiles, user.Phone)
-				phoneMap[user.Phone] = true
+		if err := s.db.Where("gitlab_username IN ?", usernameList).Find(&users).Error; err != nil {
+			logger.GetLogger().Warnf("通过 GitLab 用户名查询用户失败: %v", err)
+		} else {
+			logger.GetLogger().Infof("通过 GitLab 用户名查询到 %d 个用户", len(users))
+			for _, user := range users {
+				if user.Phone != "" && !phoneMap[user.Phone] {
+					mentionedMobiles = append(mentionedMobiles, user.Phone)
+					phoneMap[user.Phone] = true
+					logger.GetLogger().Infof("  匹配用户: GitLab用户名=%s, 手机号=%s", user.GitLabUsername, user.Phone)
+				}
 			}
 		}
 	}
 
-	if len(usernameList) > 0 {
+	// 补充通过邮箱查询（对于没有通过用户名找到的用户）
+	if len(emailList) > 0 {
 		var users []models.User
-		if err := s.db.Where("gitlab_username IN ?", usernameList).Find(&users).Error; err != nil {
-			return nil, err
-		}
-		for _, user := range users {
-			if user.Phone != "" && !phoneMap[user.Phone] {
-				mentionedMobiles = append(mentionedMobiles, user.Phone)
-				phoneMap[user.Phone] = true
+		if err := s.db.Where("email IN ?", emailList).Find(&users).Error; err != nil {
+			logger.GetLogger().Warnf("通过邮箱查询用户失败: %v", err)
+		} else {
+			logger.GetLogger().Infof("通过邮箱查询到 %d 个用户", len(users))
+			for _, user := range users {
+				if user.Phone != "" && !phoneMap[user.Phone] {
+					mentionedMobiles = append(mentionedMobiles, user.Phone)
+					phoneMap[user.Phone] = true
+					logger.GetLogger().Infof("  匹配用户: 邮箱=%s, 手机号=%s", user.Email, user.Phone)
+				}
 			}
 		}
 	}

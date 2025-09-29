@@ -26,6 +26,7 @@ func (s *WeComSender) Send(ctx context.Context, webhook *models.Webhook, payload
 		payload.Title,
 		payload.URL,
 		payload.MentionedAccounts,
+		payload.MentionedMobiles,
 	)
 
 	return s.service.SendMessage(webhook.URL, content, payload.MentionedMobiles)
