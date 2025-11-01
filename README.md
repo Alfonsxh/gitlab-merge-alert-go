@@ -138,14 +138,14 @@ graph LR
 git clone https://github.com/Alfonsxh/gitlab-merge-alert-go.git
 cd gitlab-merge-alert-go
 
-# Build backend
+# Install dependencies
 make install
 
-# Build frontend
+# Build backend + frontend binary
 make build
 
 # Run
-./gitlab-merge-alert
+./bin/gitlab-merge-alert-go
 ```
 
 ## 🤝 Contributing

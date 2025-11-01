@@ -36,13 +36,13 @@ Thumbs.db
 
 # Application specific
 logs/
-backend/data/
+data/
 *.db
 *.sqlite
 *.sqlite3
 
 # Configuration files with sensitive data
-backend/config.local.yaml
+config.local.yaml
 config.prod.yaml
 .env
 .env.local
@@ -84,5 +84,6 @@ frontend/.vite/
 frontend/*.local
 
 # Backend embed temporary files
-backend/internal/web/frontend_dist/
-backend/cmd/server/frontend_dist/
+internal/web/frontend_dist/*
+!internal/web/frontend_dist/.gitkeep
+!internal/web/frontend_dist/index.html

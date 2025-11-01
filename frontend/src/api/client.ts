@@ -62,10 +62,13 @@ apiClient.interceptors.response.use(
           const authStore = useAuthStore()
           authStore.clearAuthData()
           
-          router.push({
-            path: '/login',
-            query: { redirect: router.currentRoute.value.fullPath }
-          })
+          const currentRoute = router.currentRoute.value
+          if (currentRoute.path !== '/login') {
+            router.push({
+              path: '/login',
+              query: { redirect: currentRoute.fullPath }
+            })
+          }
           
           return Promise.reject(refreshError)
         }
@@ -75,10 +78,13 @@ apiClient.interceptors.response.use(
         const authStore = useAuthStore()
         authStore.clearAuthData()
         
-        router.push({
-          path: '/login',
-          query: { redirect: router.currentRoute.value.fullPath }
-        })
+        const currentRoute = router.currentRoute.value
+        if (currentRoute.path !== '/login') {
+          router.push({
+            path: '/login',
+            query: { redirect: currentRoute.fullPath }
+          })
+        }
       }
     } else if (response?.status === 403) {
       const message = (response?.data as any)?.error

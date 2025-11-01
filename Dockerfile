@@ -36,16 +36,16 @@ ENV GOPROXY=https://goproxy.cn,direct
 ENV GOSUMDB=sum.golang.google.cn
 
 # 设置后端工作目录
-WORKDIR /app/backend
+WORKDIR /app
 
-# 复制后端 go.mod 和 go.sum
-COPY backend/go.mod backend/go.sum ./
+# 复制 go.mod 和 go.sum
+COPY go.mod go.sum ./
 
 # 预下载依赖（缓存 go modules）
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
 
 # 复制后端源代码
-COPY backend/ ./
+COPY . ./
 
 # 从前端构建阶段复制构建好的前端文件（用于嵌入）
 COPY --from=frontend-builder /app/frontend/dist ./internal/web/frontend_dist
@@ -66,7 +66,7 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 # 仅复制构建的二进制文件（已包含嵌入的前端资源）
-COPY --from=backend-builder /app/backend/main .
+COPY --from=backend-builder /app/main .
 
 # 复制配置文件示例
 COPY config.example.yaml ./config.yaml

@@ -2,8 +2,8 @@
 APP_NAME := gitlab-merge-alert-go
 BIN_DIR := bin
 FRONTEND_DIR := frontend
-BACKEND_DIR := backend
-FRONTEND_DIST := $(BACKEND_DIR)/internal/web/frontend_dist
+FRONTEND_DIST := internal/web/frontend_dist
+FRONTEND_PLACEHOLDER_DIR := internal/web/frontend_placeholder
 
 # 默认目标
 .DEFAULT_GOAL := build
@@ -12,22 +12,23 @@ FRONTEND_DIST := $(BACKEND_DIR)/internal/web/frontend_dist
 .PHONY: build run clean install \
 	frontend frontend-install \
 	backend-install \
-	docker-build-x86
+	docker-build-x86 \
+	frontend-reset
+
+frontend-install:
+	cd $(FRONTEND_DIR) && npm install
 
 # 前端构建
 frontend: frontend-install
 	@echo "Building frontend..."
 	cd $(FRONTEND_DIR) && npm run build
-	@echo "Copying frontend dist to backend for embedding..."
+	@echo "Copying frontend dist to embed directory..."
 	rm -rf $(FRONTEND_DIST)
 	cp -r $(FRONTEND_DIR)/dist $(FRONTEND_DIST)
 	@echo "Frontend build complete"
 
-frontend-install:
-	cd $(FRONTEND_DIR) && npm install
-
 backend-install:
-	cd $(BACKEND_DIR) && go mod tidy && go mod vendor
+	go mod tidy && go mod vendor
 
 # 安装依赖
 install: frontend-install backend-install
@@ -36,14 +37,15 @@ install: frontend-install backend-install
 # 主构建目标
 build: frontend
 	@echo "Building backend with embedded frontend for linux/amd64..."
-	cd $(BACKEND_DIR) && GOOS=linux GOARCH=amd64 go build -tags embed -o ../$(BIN_DIR)/$(APP_NAME) ./cmd/main.go
+	mkdir -p $(BIN_DIR)
+	GOOS=linux GOARCH=amd64 go build -tags embed -o $(BIN_DIR)/$(APP_NAME) ./cmd
 	@echo "Cleaning up temporary frontend files..."
-	rm -rf $(FRONTEND_DIST)
+	$(MAKE) frontend-reset
 	@echo "Build complete: $(BIN_DIR)/$(APP_NAME)"
 
 # 运行应用
 run:
-	cd $(BACKEND_DIR) && go run ./cmd/main.go
+	go run ./cmd/main.go
 
 # Docker构建
 docker-build-x86:
@@ -53,5 +55,11 @@ docker-build-x86:
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BIN_DIR)/$(APP_NAME)
-	rm -rf $(FRONTEND_DIST)
+	$(MAKE) frontend-reset
 	@echo "Clean complete"
+
+frontend-reset:
+	@echo "Restoring embedded frontend placeholder..."
+	rm -rf $(FRONTEND_DIST)
+	mkdir -p $(FRONTEND_DIST)
+	cp -r $(FRONTEND_PLACEHOLDER_DIR)/. $(FRONTEND_DIST)/

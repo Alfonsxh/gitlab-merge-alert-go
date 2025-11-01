@@ -169,14 +169,14 @@ graph LR
 git clone https://github.com/Alfonsxh/gitlab-merge-alert-go.git
 cd gitlab-merge-alert-go
 
-# 构建后端
+# 安装依赖
 make install
 
-# 构建前端
+# 构建包含前端的后端二进制
 make build
 
 # 运行
-./gitlab-merge-alert
+./bin/gitlab-merge-alert-go
 ```
 
 ## 🤝 贡献指南
