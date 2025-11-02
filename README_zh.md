@@ -6,6 +6,9 @@
 ![许可证](https://img.shields.io/badge/license-MIT-green)
 ![Docker 拉取](https://img.shields.io/docker/pulls/alfonsxh/gitlab-merge-alert-go)
 ![GitHub Stars](https://img.shields.io/github/stars/Alfonsxh/gitlab-merge-alert-go?style=social)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Alfonsxh/gitlab-merge-alert-go.svg)](https://pkg.go.dev/github.com/Alfonsxh/gitlab-merge-alert-go)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Alfonsxh/gitlab-merge-alert-go)](https://goreportcard.com/report/github.com/Alfonsxh/gitlab-merge-alert-go)
+[![codecov](https://codecov.io/gh/Alfonsxh/gitlab-merge-alert-go/branch/main/graph/badge.svg)](https://codecov.io/gh/Alfonsxh/gitlab-merge-alert-go)
 
 **GitLab 合并请求实时推送企业微信** - 再也不会错过代码审查！
 
